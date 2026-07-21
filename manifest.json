@@ -1,0 +1,9 @@
+{
+  "id": "pavel-dashboard",
+  "name": "Pavel Dashboard",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "A local-first dashboard for Pavel's existing tasks and knowledge cards.",
+  "author": "Pavel",
+  "isDesktopOnly": false
+}
