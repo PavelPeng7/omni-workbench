@@ -8,11 +8,11 @@ A local-first dashboard and task workbench for Obsidian. It turns Markdown notes
 - Provides a task workbench with filters for today, active, in-progress, overdue, and completed tasks.
 - Creates, edits, completes, and deletes task notes while preserving the Markdown-first workflow.
 - Runs a local focus timer stored in each task's frontmatter.
-- Optionally reads a `.base` file to scope the task list; otherwise it reads every note with `type: 任务`.
+- Reads tasks from the configured task folder using a configurable frontmatter field mapping; a `.base` file can be added as an optional Obsidian Bases view.
 
 ## Privacy
 
-Focus Workbench is local-first. It does not make network requests, collect telemetry, or upload vault content. It reads only the task, inbox, permanent-note, and literature-note folders configured in its settings, plus the optional task `.base` file. All task and timer data stays in Markdown frontmatter inside your vault.
+Focus Workbench is local-first. It does not make network requests, collect telemetry, or upload vault content. It reads only the task, inbox, permanent-note, and literature-note folders configured in its settings, plus the optional task template and `.base` file. All task and timer data stays in Markdown frontmatter inside your vault.
 
 ## Install from the community directory
 
@@ -20,7 +20,7 @@ After the plugin is approved, open **Settings → Community plugins**, search fo
 
 ## Data format
 
-The plugin works with Markdown files that use frontmatter. Its current task conventions use Chinese field names:
+The plugin works with Markdown files that use frontmatter. Its default task conventions use Chinese field names, and every field name can be remapped in the setup wizard or **Settings → Focus Workbench**:
 
 ```yaml
 ---
@@ -29,14 +29,17 @@ type: 任务
 任务状态: 待做 # 待做 | 进行中 | 暂停 | 完成
 任务优先级: P2 # P0 | P1 | P2
 计划日期: 2026-07-22
-计时状态: 未开始 # 未开始 | 进行中
+预计耗时分钟: 25 # optional
+计时状态: 未开始 # 未开始 | 进行中 | 暂停 | 完成
 计时开始时间:
 累计耗时秒: 0
 完成: false
 ---
 ```
 
-Ideas use `type: 闪念笔记`. The default task location is `目标与任务/任务管理/任务`, and the default Base file is `目标与任务/任务总表.base`. Both paths can be adapted to your vault from **Settings → Focus Workbench**.
+The focus timer counts up: elapsed seconds accumulate in `累计耗时秒` while `计时状态` is `进行中`. With the optional `预计耗时分钟` estimate set, the timer pill shows remaining time and keeps counting into overtime (with a one-time notice) instead of stopping; a session left running for more than 12 hours is auto-paused when the workbench opens. New tasks are created from the Markdown template configured in settings (default `模板/任务模板.md`), falling back to the minimal built-in format above when the file does not exist.
+
+Ideas use `type: 闪念笔记`. The default task location is `目标与任务/任务管理/任务`, and the default Base file is `目标与任务/任务总表.base`. Folders, field names, the task template, and the Base path can all be adapted to your vault from **Settings → Focus Workbench**. The `.base` file is an optional companion view; the plugin does not interpret its filter expressions.
 
 ## Development
 
@@ -60,7 +63,7 @@ dist/
 For local development, copy `main.js`, `manifest.json`, and `styles.css` into:
 
 ```text
-<vault>/.obsidian/plugins/focus-workbench/
+<vault>/.obsidian/plugins/pavel-dashboard/
 ```
 
 Restart Obsidian or reload the plugin after making changes.
@@ -76,7 +79,7 @@ Restart Obsidian or reload the plugin after making changes.
 Each release workflow also generates GitHub artifact attestations for the three release assets. To verify a downloaded asset, run:
 
 ```bash
-gh attestation verify <asset-path> -R PavelPeng7/obsidian-ultra-dashboard
+gh attestation verify <asset-path> -R PavelPeng7/focus-workbench
 ```
 
 ## License

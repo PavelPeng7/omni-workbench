@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.0
+
+### Added
+
+- Setup wizard, configurable folders, and frontmatter field mapping (schema).
+- Knowledge navigation tab, task and article search, and keyboard shortcuts (Ctrl/Cmd+K, N).
+- Project dropdown in the task editor, populated from the configured project folder.
+- Filename validation for newly created notes.
+- New tasks are created from a configurable Markdown template (default `模板/任务模板.md`) with a built-in fallback.
+- The workbench auto-refreshes when watched notes change outside the plugin.
+- Overtime notice when a focus session passes its estimate; sessions left running over 12 hours are auto-paused on open.
+
+### Fixed
+
+- Date-only frontmatter values are parsed in local time, so today and overdue filters follow the local calendar.
+- Pausing the previously focused task now writes through the schema-mapped status field.
+
+### Changed
+
+- The focus timer counts up via `累计耗时秒` with an optional estimate; `倒计时剩余秒` is no longer used.
+- The `.base` file is an optional companion view; the plugin no longer interprets its filter expressions.
+
 ## 0.1.3
 
 ### Improved
