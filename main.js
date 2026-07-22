@@ -366,7 +366,7 @@ class FocusWorkbenchView extends ItemView {
   async transitionTask(file, targetStatus) {
     if (targetStatus === "进行中") {
       const other = this.allTaskFiles().find(task => task.path !== file.path && this.timerState(task) === "进行中");
-      if (other) await this.app.fileManager.processFrontMatter(other, fm => { this.pauseTimerFrontmatter(fm); fm["任务状态"] = "暂停"; });
+      if (other) await this.app.fileManager.processFrontMatter(other, fm => { this.pauseTimerFrontmatter(fm); this.setTaskProperty(fm, "statusField", "暂停"); });
       await this.app.fileManager.processFrontMatter(file, fm => {
         if (fm[this.schema().timerStateField] !== "进行中") { this.setTaskProperty(fm, "timerStateField", "进行中"); this.setTaskProperty(fm, "timerStartedField", new Date().toISOString()); }
         this.setTaskProperty(fm, "statusField", "进行中"); this.setTaskProperty(fm, "doneField", false); this.setTaskProperty(fm, "completedAtField", "");
