@@ -8,6 +8,7 @@ const DEFAULT_SETTINGS = {
   inboxFolder: "",
   literatureFolder: "",
   permanentFolder: "",
+  taskTemplatePath: "模板/任务模板.md",
   schema: {
     typeField: "type", typeValue: "任务", statusField: "任务状态", projectField: "所属项目", priorityField: "任务优先级", planField: "计划日期",
     doneField: "完成", expectedField: "预计耗时分钟", timerStateField: "计时状态", timerStartedField: "计时开始时间", elapsedField: "累计耗时秒", completedAtField: "完成日期"
@@ -386,7 +387,21 @@ class FocusWorkbenchView extends ItemView {
   uniquePath(dir, title) { const date = this.dateKey(); let path = `${dir}/${date} ${title}.md`; let index = 2; while (this.app.vault.getAbstractFileByPath(path)) path = `${dir}/${date} ${title} ${index++}.md`; return path; }
   async createIdea() { new TextPromptModal(this.app, "记录灵感", "一句话写下想法", async title => { const dir = this.config().inbox; await this.ensureFolder(dir); const file = await this.app.vault.create(this.uniquePath(dir, title), `---\ntype: 闪念笔记\n状态: 收集\ndate: ${this.dateKey()}\n---\n\n# ${title}\n\n`); await this.openFile(file); await this.render(); }, title => this.validateNoteTitle(title)).open(); }
   async archiveIdea(file) { await this.app.fileManager.processFrontMatter(file, fm => { fm["状态"] = "已处理"; }); new Notice("灵感已标记为已处理"); await this.render(); }
-  async createTask() { new TextPromptModal(this.app, "新建任务", "任务标题", async title => { const dir = this.config().task; const schema = this.schema(); await this.ensureFolder(dir); const file = await this.app.vault.create(this.uniquePath(dir, title), `---\n${schema.typeField}: ${schema.typeValue}\n${schema.projectField}: \"\"\n${schema.statusField}: 待做\n${schema.priorityField}: P2\n${schema.planField}: ${this.dateKey()}\n${schema.timerStateField}: 未开始\n${schema.timerStartedField}: \n${schema.elapsedField}: 0\n${schema.doneField}: false\n---\n\n# ${title}\n\n## 完成标准\n\n- [ ] \n`); await this.openFile(file); await this.render(); }, title => this.validateNoteTitle(title)).open(); }
+  async createTask() { new TextPromptModal(this.app, "新建任务", "任务标题", async title => { const dir = this.config().task; await this.ensureFolder(dir); const file = await this.app.vault.create(this.uniquePath(dir, title), await this.newTaskContent(title)); await this.openFile(file); await this.render(); }, title => this.validateNoteTitle(title)).open(); }
+  escapeRegExp(text) { return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+  setFrontmatterField(source, field, value) { return source.replace(new RegExp(`^(${this.escapeRegExp(field)}\\s*:).*$`, "m"), (match, prefix) => `${prefix} ${value}`); }
+  async newTaskContent(title) {
+    const schema = this.schema();
+    const templatePath = this.plugin.settings.taskTemplatePath;
+    const template = templatePath ? this.app.vault.getAbstractFileByPath(templatePath) : null;
+    if (template && !template.children) {
+      let content = await this.app.vault.cachedRead(template);
+      content = this.setFrontmatterField(content, schema.planField, this.dateKey());
+      content = this.setFrontmatterField(content, "创建日期", this.dateKey());
+      return /^# .+$/m.test(content) ? content.replace(/^# .+$/m, () => `# ${title}`) : `${content.trimEnd()}\n\n# ${title}\n`;
+    }
+    return `---\n${schema.typeField}: ${schema.typeValue}\n${schema.projectField}: \"\"\n${schema.statusField}: 待做\n${schema.priorityField}: P2\n${schema.planField}: ${this.dateKey()}\n${schema.timerStateField}: 未开始\n${schema.timerStartedField}: \n${schema.elapsedField}: 0\n${schema.doneField}: false\n---\n\n# ${title}\n\n## 完成标准\n\n- [ ] \n`;
+  }
   async editTask(file) {
     const fm = this.meta(file); const project = String(this.taskProperty(file, "projectField") || "").replace(/^\[\[|\]\]$/g, "");
     new TaskEditorModal(this.app, file, { project, priority: this.priority(file), status: this.taskStatus(file), plan: this.taskPlan(file) ? this.dateKey(this.taskPlan(file)) : "", estimate: this.taskProperty(file, "expectedField") || "" }, this.projectOptions(), async values => {
@@ -459,6 +474,7 @@ class FocusWorkbenchSettingTab extends PluginSettingTab {
     }));
     new Setting(containerEl).setName("任务目录").setDesc("只读取此目录及子目录内、符合任务类型字段和值的 Markdown 文件。").addText(text => text.setPlaceholder("Tasks").setValue(this.plugin.settings.taskFolder).onChange(async value => { this.plugin.settings.taskFolder = value.trim().replace(/^\.\//, "").replace(/\/$/, ""); await this.plugin.saveSettings(); }));
     new Setting(containerEl).setName("项目目录").setDesc("编辑任务时用于生成所属项目下拉选项。").addText(text => text.setPlaceholder("Projects").setValue(this.plugin.settings.projectFolder).onChange(async value => { this.plugin.settings.projectFolder = value.trim().replace(/^\.\//, "").replace(/\/$/, ""); await this.plugin.saveSettings(); }));
+    new Setting(containerEl).setName("任务模板路径").setDesc("新建任务时优先使用该 Markdown 模板，自动填写计划日期与创建日期，并替换首个一级标题；文件不存在时使用内置格式。").addText(text => text.setPlaceholder("模板/任务模板.md").setValue(this.plugin.settings.taskTemplatePath).onChange(async value => { this.plugin.settings.taskTemplatePath = value.trim().replace(/^\.\//, ""); await this.plugin.saveSettings(); }));
     new Setting(containerEl)
       .setName("任务总表路径")
       .setDesc("可填写已有 .base 文件，例如：目标与任务/任务总表.base")
