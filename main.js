@@ -1,6 +1,6 @@
 const { ItemView, Modal, Notice, Plugin, PluginSettingTab, Setting } = require("obsidian");
 
-const VIEW_TYPE = "pavel-dashboard-view";
+const VIEW_TYPE = "focus-workbench-view";
 const DEFAULT_SETTINGS = { taskBasePath: "目标与任务/任务总表.base" };
 
 class TextPromptModal extends Modal {
@@ -36,10 +36,10 @@ class TaskEditorModal extends Modal {
   }
 }
 
-class PavelDashboardView extends ItemView {
+class FocusWorkbenchView extends ItemView {
   constructor(leaf, plugin) { super(leaf); this.plugin = plugin; this.tab = "home"; this.taskFilter = "today"; this.focusPath = ""; }
   getViewType() { return VIEW_TYPE; }
-  getDisplayText() { return "Pavel Dashboard"; }
+  getDisplayText() { return "Focus Workbench"; }
   getIcon() { return "layout-dashboard"; }
   async onOpen() { this.sourceTasks = []; await this.render(); this.timerId = window.setInterval(() => this.updateTimers(), 1000); }
   async onClose() { if (this.timerId) window.clearInterval(this.timerId); }
@@ -266,11 +266,11 @@ function unifiedTaskBase() {
   return `filters:\n  and:\n    - note.type == "任务"\nproperties:\n  file.name:\n    displayName: 任务名\n  所属项目:\n    displayName: 所属项目\n  任务状态:\n    displayName: 状态\n  任务优先级:\n    displayName: 优先级\n  计划日期:\n    displayName: 计划日期\n  预计耗时分钟:\n    displayName: 预计分钟\n  完成:\n    displayName: 完成\n  完成日期:\n    displayName: 完成日期\nviews:\n  - type: table\n    name: 全部任务\n    order:\n      - file.name\n      - 所属项目\n      - 任务状态\n      - 任务优先级\n      - 计划日期\n      - 预计耗时分钟\n      - 完成\n  - type: table\n    name: 今日\n    filters:\n      and:\n        - 计划日期 == today()\n        - 任务状态 != "完成"\n    order:\n      - file.name\n      - 所属项目\n      - 任务优先级\n  - type: table\n    name: 进行中\n    filters:\n      and:\n        - 任务状态 == "进行中"\n    order:\n      - file.name\n      - 所属项目\n      - 计划日期\n  - type: table\n    name: 已完成\n    filters:\n      and:\n        - 任务状态 == "完成"\n    order:\n      - file.name\n      - 所属项目\n      - 完成日期\n`;
 }
 
-class PavelDashboardSettingTab extends PluginSettingTab {
+class FocusWorkbenchSettingTab extends PluginSettingTab {
   constructor(app, plugin) { super(app, plugin); this.plugin = plugin; }
   display() {
     const { containerEl } = this; containerEl.empty();
-    containerEl.createEl("h2", { text: "Pavel Dashboard · 任务数据源" });
+    containerEl.createEl("h2", { text: "Focus Workbench · 任务数据源" });
     containerEl.createEl("p", { text: "任务总表（.base）定义插件的任务范围；任务数据仍保存在 Markdown 笔记的 frontmatter 中。插件会应用表顶层的 type 与属性等值过滤，不会复制或迁移已有任务。" });
     new Setting(containerEl)
       .setName("任务总表路径")
@@ -294,13 +294,13 @@ class PavelDashboardSettingTab extends PluginSettingTab {
   }
 }
 
-module.exports = class PavelDashboardPlugin extends Plugin {
+module.exports = class FocusWorkbenchPlugin extends Plugin {
   async onload() {
     await this.loadSettings();
-    this.registerView(VIEW_TYPE, leaf => new PavelDashboardView(leaf, this));
-    this.addSettingTab(new PavelDashboardSettingTab(this.app, this));
-    this.addRibbonIcon("layout-dashboard", "打开 Pavel Dashboard", () => this.activateView());
-    this.addCommand({ id: "open-pavel-dashboard", name: "Open Pavel Dashboard", callback: () => this.activateView() });
+    this.registerView(VIEW_TYPE, leaf => new FocusWorkbenchView(leaf, this));
+    this.addSettingTab(new FocusWorkbenchSettingTab(this.app, this));
+    this.addRibbonIcon("layout-dashboard", "打开 Focus Workbench", () => this.activateView());
+    this.addCommand({ id: "open-focus-workbench", name: "Open Focus Workbench", callback: () => this.activateView() });
   }
   async loadSettings() { this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData()); }
   async saveSettings() { await this.saveData(this.settings); }

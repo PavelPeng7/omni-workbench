@@ -1,9 +1,9 @@
 {
-  "id": "pavel-dashboard",
-  "name": "Pavel Dashboard",
-  "version": "0.1.0",
+  "id": "focus-workbench",
+  "name": "Focus Workbench",
+  "version": "0.1.1",
   "minAppVersion": "1.5.0",
-  "description": "A local-first dashboard for Pavel's existing tasks and knowledge cards.",
-  "author": "Pavel",
+  "description": "A local-first dashboard for tasks, focus, and knowledge notes.",
+  "author": "Pavel Peng",
   "isDesktopOnly": false
 }
