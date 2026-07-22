@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.3
+
+### Improved
+
+- Restricted note discovery to folders explicitly configured in Focus Workbench instead of enumerating the entire vault.
+- Added GitHub Artifact Attestations for release assets.
+- Added an npm lockfile for reproducible builds.
+- Removed `!important` declarations to improve compatibility with Obsidian themes and user styles.
+
 ## 0.1.2
 
 ### Fixed
