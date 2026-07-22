@@ -77,6 +77,8 @@ class FocusWorkbenchView extends ItemView {
   getIcon() { return "layout-dashboard"; }
   async onOpen() {
     this.sourceTasks = [];
+    this.overtimeNotified = new Set();
+    await this.reconcileStaleTimers();
     await this.render();
     this.timerId = window.setInterval(() => this.updateTimers(), 1000);
     this.registerDomEvent(window, "keydown", event => this.handleShortcut(event));
@@ -101,6 +103,16 @@ class FocusWorkbenchView extends ItemView {
       if (active && this.contentEl.contains(active) && /^(input|textarea|select)$/i.test(active.tagName)) { this.scheduleRefresh(); return; }
       void this.render();
     }, 300);
+  }
+  async reconcileStaleTimers() {
+    const staleMs = 12 * 3600 * 1000;
+    for (const file of this.allTaskFiles()) {
+      if (this.timerState(file) !== "进行中") continue;
+      const started = this.timestamp(this.taskProperty(file, "timerStartedField"));
+      if (!started || Date.now() - started.getTime() <= staleMs) continue;
+      await this.app.fileManager.processFrontMatter(file, fm => this.pauseTimerFrontmatter(fm));
+      new Notice(`“${file.basename}”的计时已超过 12 小时，已自动暂停，累计时长已保留。`);
+    }
   }
 
   config() {
@@ -183,9 +195,21 @@ class FocusWorkbenchView extends ItemView {
     await this.app.workspace.getLeaf(false).openFile(file);
   }
   button(parent, text, action, cls = "") { const button = parent.createEl("button", { text, cls }); button.addEventListener("click", event => void action(event)); return button; }
-  isOverdue(file) { const expected = this.expectedSeconds(file); return expected > 0 && this.elapsedSeconds(file) > expected; }
-  timer(parent, file) { return parent.createEl("strong", { cls: `pvd-timer ${this.timerState(file) === "进行中" ? "is-running" : ""} ${this.isOverdue(file) ? "is-over" : ""}`, text: this.timerLabel(file), attr: { "data-pvd-timer": file.path } }); }
-  updateTimers() { this.contentEl.querySelectorAll("[data-pvd-timer]").forEach(element => { const file = this.app.vault.getAbstractFileByPath(element.getAttribute("data-pvd-timer")); if (!file || file.children) return; element.textContent = this.timerLabel(file); element.classList.toggle("is-running", this.timerState(file) === "进行中"); element.classList.toggle("is-over", this.isOverdue(file)); }); }
+  isOvertime(file) { const expected = this.expectedSeconds(file); return expected > 0 && this.elapsedSeconds(file) > expected; }
+  timer(parent, file) { return parent.createEl("strong", { cls: `pvd-timer ${this.timerState(file) === "进行中" ? "is-running" : ""} ${this.isOvertime(file) ? "is-over" : ""}`, text: this.timerLabel(file), attr: { "data-pvd-timer": file.path } }); }
+  updateTimers() {
+    this.contentEl.querySelectorAll("[data-pvd-timer]").forEach(element => {
+      const file = this.app.vault.getAbstractFileByPath(element.getAttribute("data-pvd-timer"));
+      if (!file || file.children) return;
+      const running = this.timerState(file) === "进行中";
+      element.textContent = this.timerLabel(file);
+      element.classList.toggle("is-running", running);
+      element.classList.toggle("is-over", this.isOvertime(file));
+      if (!running || !this.isOvertime(file)) return;
+      const key = `${file.path}:${this.taskProperty(file, "timerStartedField")}`;
+      if (this.overtimeNotified && !this.overtimeNotified.has(key)) { this.overtimeNotified.add(key); new Notice(`“${file.basename}”已超过预计耗时，继续计时中。`); }
+    });
+  }
 
   async render() {
     await this.refreshTaskSource();
