@@ -80,8 +80,28 @@ class FocusWorkbenchView extends ItemView {
     await this.render();
     this.timerId = window.setInterval(() => this.updateTimers(), 1000);
     this.registerDomEvent(window, "keydown", event => this.handleShortcut(event));
+    this.registerEvent(this.app.metadataCache.on("changed", file => this.scheduleRefreshIfWatched(file.path)));
+    this.registerEvent(this.app.vault.on("create", file => this.scheduleRefreshIfWatched(file.path)));
+    this.registerEvent(this.app.vault.on("delete", file => this.scheduleRefreshIfWatched(file.path)));
+    this.registerEvent(this.app.vault.on("rename", (file, oldPath) => this.scheduleRefreshIfWatched(file.path, oldPath)));
   }
-  async onClose() { if (this.timerId) window.clearInterval(this.timerId); }
+  async onClose() { if (this.timerId) window.clearInterval(this.timerId); if (this.refreshTimeout) window.clearTimeout(this.refreshTimeout); }
+
+  isWatchedPath(path) {
+    if (!path) return false;
+    const cfg = this.config();
+    return path === "知识库配置.md" || [cfg.task, cfg.project, cfg.inbox, cfg.permanent, cfg.literature].some(dir => dir && (path === dir || path.startsWith(`${dir}/`)));
+  }
+  scheduleRefreshIfWatched(...paths) { if (paths.some(path => this.isWatchedPath(path))) this.scheduleRefresh(); }
+  scheduleRefresh() {
+    if (this.refreshTimeout) window.clearTimeout(this.refreshTimeout);
+    this.refreshTimeout = window.setTimeout(() => {
+      this.refreshTimeout = null;
+      const active = document.activeElement;
+      if (active && this.contentEl.contains(active) && /^(input|textarea|select)$/i.test(active.tagName)) { this.scheduleRefresh(); return; }
+      void this.render();
+    }, 300);
+  }
 
   config() {
     const file = this.app.vault.getAbstractFileByPath("知识库配置.md");
