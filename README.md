@@ -12,7 +12,7 @@ A local-first dashboard and task workbench for Obsidian. It turns Markdown notes
 
 ## Privacy
 
-Focus Workbench is local-first. It does not make network requests, collect telemetry, or upload vault content. All task and timer data stays in Markdown frontmatter inside your vault.
+Focus Workbench is local-first. It does not make network requests, collect telemetry, or upload vault content. It reads only the task, inbox, permanent-note, and literature-note folders configured in its settings, plus the optional task `.base` file. All task and timer data stays in Markdown frontmatter inside your vault.
 
 ## Install from the community directory
 
@@ -72,6 +72,12 @@ Restart Obsidian or reload the plugin after making changes.
 3. Commit the version change and push a tag with the exact same version, for example `0.1.1` (no `v` prefix).
 4. The included GitHub Action creates a GitHub Release and uploads `main.js`, `manifest.json`, and `styles.css` as assets.
 5. For the first public version, submit the repository at [Obsidian Community](https://community.obsidian.md/).
+
+Each release workflow also generates GitHub artifact attestations for the three release assets. To verify a downloaded asset, run:
+
+```bash
+gh attestation verify <asset-path> -R PavelPeng7/obsidian-ultra-dashboard
+```
 
 ## License
 

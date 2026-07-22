@@ -51,10 +51,19 @@ class FocusWorkbenchView extends ItemView {
     const goals = path("goals_folder", "目标与任务");
     return { inbox: path("inbox_folder", "闪念笔记"), permanent: path("permanent_folder", "永久笔记"), literature: path("literature_folder", "文献笔记"), goals, task: path("task_folder", `${goals}/任务管理/任务`), taskBase: this.plugin.settings.taskBasePath };
   }
-  files() { return this.app.vault.getMarkdownFiles(); }
   meta(file) { return this.app.metadataCache.getFileCache(file)?.frontmatter || {}; }
-  starts(file, dir) { return file.path === dir || file.path.startsWith(`${dir}/`); }
   useful(file) { return file.extension === "md" && file.basename !== "首页" && !file.name.startsWith("README"); }
+  notesIn(dir) {
+    const root = this.app.vault.getAbstractFileByPath(dir);
+    if (!root || !Array.isArray(root.children)) return [];
+    const notes = [];
+    const collect = entry => {
+      if (Array.isArray(entry.children)) entry.children.forEach(collect);
+      else if (this.useful(entry)) notes.push(entry);
+    };
+    collect(root);
+    return notes;
+  }
   date(value) {
     if (!value) return null;
     if (value instanceof Date) return value;
@@ -73,7 +82,7 @@ class FocusWorkbenchView extends ItemView {
   elapsedSeconds(file, now = Date.now()) { const fm = this.meta(file); const stored = Math.max(0, Number(fm["累计耗时秒"]) || 0); const started = this.timerState(file) === "进行中" ? this.date(fm["计时开始时间"]) : null; return stored + (started ? Math.max(0, Math.floor((now - started.getTime()) / 1000)) : 0); }
   formatDuration(seconds) { const value = Math.max(0, Math.floor(Math.abs(seconds))); return `${seconds < 0 ? "-" : ""}${String(Math.floor(value / 3600)).padStart(2, "0")}:${String(Math.floor(value % 3600 / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`; }
   timerLabel(file) { const expected = this.expectedSeconds(file); const elapsed = this.elapsedSeconds(file); return expected ? `剩余 ${this.formatDuration(expected - elapsed)}` : `已专注 ${this.formatDuration(elapsed)}`; }
-  allTaskFiles() { return this.files().filter(file => this.meta(file).type === "任务"); }
+  allTaskFiles() { return this.notesIn(this.config().task).filter(file => this.meta(file).type === "任务"); }
   tasks() { return this.sourceTasks || []; }
   async refreshTaskSource() {
     const allTasks = this.allTaskFiles();
@@ -139,7 +148,7 @@ class FocusWorkbenchView extends ItemView {
     this.button(quick, "💡 记录灵感", () => this.createIdea());
     this.button(quick, "✓ 新建任务", () => this.createTask());
     this.button(quick, "打开任务工作台", async () => { this.tab = "tasks"; await this.render(); });
-    const inbox = this.files().filter(file => this.starts(file, cfg.inbox) && this.useful(file))
+    const inbox = this.notesIn(cfg.inbox)
       .filter(file => !["已处理", "完成", "归档"].includes(String(this.meta(file)["状态"] || this.meta(file)["处理状态"] || "收集")))
       .sort((a, b) => b.stat.mtime - a.stat.mtime).slice(0, 5);
     const inboxCard = shell.createEl("section", { cls: "pvd-card pvd-inbox" });
@@ -158,7 +167,7 @@ class FocusWorkbenchView extends ItemView {
     const lanes = stream.createDiv({ cls: "pvd-lanes" });
     [["捕捉中", cfg.inbox], ["正在沉淀", cfg.permanent], ["阅读输入", cfg.literature]].forEach(([name, dir]) => {
       const lane = lanes.createDiv({ cls: "pvd-lane" }); lane.createEl("h3", { text: name });
-      const notes = this.files().filter(file => this.starts(file, dir) && this.useful(file)).sort((a, b) => b.stat.mtime - a.stat.mtime).slice(0, 3);
+      const notes = this.notesIn(dir).sort((a, b) => b.stat.mtime - a.stat.mtime).slice(0, 3);
       if (!notes.length) lane.createEl("span", { text: "暂无笔记" });
       notes.forEach(file => { const note = this.button(lane, "", () => this.openFile(file), "pvd-note"); note.createEl("strong", { text: file.basename }); note.createSpan({ text: this.dateKey(new Date(file.stat.mtime)) }); });
     });
