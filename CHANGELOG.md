@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2
+
+### Fixed
+
+- Restored the stable plugin ID `pavel-dashboard` so existing Community directory records and installations continue to resolve correctly.
+
 ## 0.1.1
 
 ### Changed
