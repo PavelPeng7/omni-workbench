@@ -197,7 +197,28 @@ class FocusWorkbenchView extends ItemView {
   }
   button(parent, text, action, cls = "") { const button = parent.createEl("button", { text, cls }); button.addEventListener("click", event => void action(event)); return button; }
   isOvertime(file) { const expected = this.expectedSeconds(file); return expected > 0 && this.elapsedSeconds(file) > expected; }
+  remainingPercent(file) {
+    const expected = this.expectedSeconds(file);
+    if (!expected) return null;
+    return Math.max(0, Math.min(100, ((expected - this.elapsedSeconds(file)) / expected) * 100));
+  }
   timer(parent, file) { return parent.createEl("strong", { cls: `pvd-timer ${this.timerState(file) === "进行中" ? "is-running" : ""} ${this.isOvertime(file) ? "is-over" : ""}`, text: this.timerLabel(file), attr: { "data-pvd-timer": file.path } }); }
+  countdownLiquid(parent, file) {
+    const percent = this.remainingPercent(file);
+    const label = percent === null ? "未设时限" : `${Math.round(percent)}%`;
+    const liquid = parent.createEl("aside", {
+      cls: `pvd-countdown-liquid ${this.timerState(file) === "进行中" ? "is-running" : ""} ${this.isOvertime(file) ? "is-over" : ""} ${percent === null ? "is-unlimited" : ""}`,
+      attr: { "data-pvd-liquid": file.path, role: "img", "aria-label": `倒计时液体：${percent === null ? "未设预计时长" : `剩余 ${Math.round(percent)}%`}` }
+    });
+    liquid.style.setProperty("--pvd-liquid-level", `${percent === null ? 100 : percent}%`);
+    const glass = liquid.createDiv({ cls: "pvd-liquid-glass", attr: { "aria-hidden": "true" } });
+    const fill = glass.createDiv({ cls: "pvd-liquid-fill" });
+    glass.createDiv({ cls: "pvd-liquid-glint" });
+    const copy = liquid.createDiv({ cls: "pvd-liquid-copy" });
+    copy.createEl("strong", { text: label, attr: { "data-pvd-liquid-percent": "" } });
+    copy.createSpan({ text: percent === null ? "未设时限" : "剩余时间", attr: { "data-pvd-liquid-caption": "" } });
+    return liquid;
+  }
   updateTimers() {
     this.contentEl.querySelectorAll("[data-pvd-timer]").forEach(element => {
       const file = this.app.vault.getAbstractFileByPath(element.getAttribute("data-pvd-timer"));
@@ -209,6 +230,19 @@ class FocusWorkbenchView extends ItemView {
       if (!running || !this.isOvertime(file)) return;
       const key = `${file.path}:${this.taskProperty(file, "timerStartedField")}`;
       if (this.overtimeNotified && !this.overtimeNotified.has(key)) { this.overtimeNotified.add(key); new Notice(`“${file.basename}”已超过预计耗时，继续计时中。`); }
+    });
+    this.contentEl.querySelectorAll("[data-pvd-liquid]").forEach(liquid => {
+      const file = this.app.vault.getAbstractFileByPath(liquid.getAttribute("data-pvd-liquid"));
+      if (!file || file.children) return;
+      const percent = this.remainingPercent(file);
+      const running = this.timerState(file) === "进行中";
+      liquid.style.setProperty("--pvd-liquid-level", `${percent === null ? 100 : percent}%`);
+      liquid.classList.toggle("is-running", running);
+      liquid.classList.toggle("is-over", this.isOvertime(file));
+      liquid.classList.toggle("is-unlimited", percent === null);
+      liquid.setAttribute("aria-label", `倒计时液体：${percent === null ? "未设预计时长" : `剩余 ${Math.round(percent)}%`}`);
+      liquid.querySelector("[data-pvd-liquid-percent]").textContent = percent === null ? "—" : `${Math.round(percent)}%`;
+      liquid.querySelector("[data-pvd-liquid-caption]").textContent = percent === null ? "未设时限" : "剩余时间";
     });
   }
 
@@ -321,19 +355,29 @@ class FocusWorkbenchView extends ItemView {
     const todayKey = this.calendarKey(today);
     [["今日", active.filter(file => this.isTodayTask(file, todayKey)).length], ["进行中", active.filter(file => this.taskStatus(file) === "进行中").length], ["已逾期", active.filter(file => this.isPastCalendarDay(this.taskPlanKey(file), today)).length], ["待推进", active.length]].forEach(([label, count]) => { const stat = summary.createDiv(); stat.createEl("b", { text: String(count) }); stat.createSpan({ text: label }); });
     const filters = { today: "今日", active: "全部待办", doing: "进行中", overdue: "已逾期", done: "已完成" };
-    const toolbar = shell.createDiv({ cls: "pvd-task-toolbar" });
-    const search = toolbar.createEl("input", { cls: "pvd-task-search", type: "search", placeholder: "搜索任务、项目或优先级…", value: this.taskSearch, attr: { "aria-label": "搜索任务" } });
-    search.addEventListener("input", event => { this.taskSearch = event.target.value; void this.renderTasksResults(this.taskResultsEl, filters); });
-    this.button(toolbar, "＋ 新建任务", () => this.createTask(), "mod-cta");
-    const filterBar = shell.createDiv({ cls: "pvd-filter" });
-    Object.entries(filters).forEach(([key, label]) => this.button(filterBar, label, async () => { this.taskFilter = key; await this.render(); }, this.taskFilter === key ? "is-active" : ""));
     const focus = this.focusTask(tasks);
     if (focus) {
-      const mission = shell.createEl("section", { cls: "pvd-card pvd-mission" }); mission.createEl("p", { text: "CURRENT FOCUS" }); mission.createEl("h2", { text: focus.basename }); this.timer(mission, focus);
+      const mission = shell.createEl("section", { cls: "pvd-card pvd-mission pvd-water-focus-v2" });
+      const missionHead = mission.createDiv({ cls: "pvd-mission-head" });
+      const missionCopy = missionHead.createDiv({ cls: "pvd-mission-copy" });
+      missionCopy.createEl("p", { text: "CURRENT FOCUS" });
+      missionCopy.createEl("h2", { text: focus.basename });
+      const missionMeta = missionCopy.createDiv({ cls: "pvd-mission-meta" });
+      this.timer(missionMeta, focus);
+      const project = String(this.taskProperty(focus, "projectField") || "未关联项目").replace(/^\[\[|\]\]$/g, "");
+      missionMeta.createSpan({ text: `${project} · ${this.priority(focus)}` });
+      this.countdownLiquid(mission, focus);
       const track = mission.createDiv({ cls: "pvd-stage" }); ["待做", "进行中", "暂停", "完成"].forEach(stage => track.createEl("span", { text: stage, cls: this.taskStatus(focus) === stage ? "is-current" : this.taskDone(focus) ? "is-done" : "" }));
       const missionActions = mission.createDiv({ cls: "pvd-actions" }); this.button(missionActions, this.timerState(focus) === "进行中" ? "暂停专注" : "开始专注", () => this.toggleTimer(focus), "mod-cta"); this.button(missionActions, "编辑", () => this.editTask(focus)); this.button(missionActions, "完成", () => this.complete(focus));
       const switcher = mission.createDiv({ cls: "pvd-focus-switcher" }); switcher.createSpan({ text: "切换焦点" }); const chips = switcher.createDiv(); active.sort((a, b) => this.compareTasks(a, b)).slice(0, 6).forEach(file => this.button(chips, file.basename, () => this.setFocus(file), file.path === focus.path ? "is-active" : ""));
     }
+    const controls = shell.createEl("section", { cls: "pvd-card pvd-task-controls" });
+    const toolbar = controls.createDiv({ cls: "pvd-task-toolbar" });
+    const search = toolbar.createEl("input", { cls: "pvd-task-search", type: "search", placeholder: "搜索任务、项目或优先级…", value: this.taskSearch, attr: { "aria-label": "搜索任务" } });
+    search.addEventListener("input", event => { this.taskSearch = event.target.value; void this.renderTasksResults(this.taskResultsEl, filters); });
+    this.button(toolbar, "＋ 新建任务", () => this.createTask(), "mod-cta");
+    const filterBar = controls.createDiv({ cls: "pvd-filter" });
+    Object.entries(filters).forEach(([key, label]) => this.button(filterBar, label, async () => { this.taskFilter = key; await this.render(); }, this.taskFilter === key ? "is-active" : ""));
     const results = shell.createDiv({ cls: "pvd-task-results" });
     this.taskResultsEl = results;
     await this.renderTasksResults(results, filters, tasks, today);
@@ -518,5 +562,7 @@ module.exports = class FocusWorkbenchPlugin extends Plugin {
   }
   onunload() { this.app.workspace.detachLeavesOfType(VIEW_TYPE); }
 };
+
+/* nosourcemap */
 
 /* nosourcemap */
