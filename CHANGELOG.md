@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.1
+
+### Added
+
+- Remaining-time percentage and animated liquid level for the Current Focus task.
+
+### Improved
+
+- Reorganized Current Focus metadata, stage indicators, actions, and focus switching for clearer interaction.
+- Moved task search and status filters below Current Focus.
+- Refined the responsive water animation, button reflections, and card edge glow.
+
 ## 0.2.0
 
 ### Added
