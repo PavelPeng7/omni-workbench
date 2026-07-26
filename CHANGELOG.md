@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.2.8
+
+### Added
+
+- Task workbench primary views for Today, visual planning, and all tasks.
+- Calendar, project timeline, and task statistics views with shared project, priority, and status filters.
+- Notion-inspired timeline grouping and status charts styled to match Focus Workbench.
+- Card-note workflow for fleeting, literature, and permanent notes with article navigation.
+- Optional initializer for the standard card-note and task repository structure.
+- Runtime-scoped visual styles so task visualization markup and CSS load together.
+
+### Improved
+
+- Completed tasks stay collapsed until explicitly expanded.
+- The focus panel remains available beside task views and adapts to narrow screens.
+- New task filenames use the entered title without automatically adding a date or time.
+- Timeline tasks use separate rows to prevent overlapping within the same project.
+
+### Fixed
+
+- Today tasks are detected consistently from mapped task fields.
+- Task editor project options are populated from the configured project folder.
+- Statistics SVG icons have explicit dimensions and cannot expand across the page.
+- Visual view styles are isolated from legacy calendar, timeline, and statistics rules.
+
 ## 0.2.1
 
 ### Added

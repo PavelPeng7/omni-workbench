@@ -72,7 +72,7 @@ class SetupModal extends Modal {
 }
 
 class FocusWorkbenchView extends ItemView {
-  constructor(leaf, plugin) { super(leaf); this.plugin = plugin; this.tab = "home"; this.taskFilter = "today"; this.focusPath = ""; this.selectedTaskPath = ""; this.taskSearch = ""; this.knowledgeFilter = "all"; this.knowledgeSearch = ""; }
+  constructor(leaf, plugin) { super(leaf); this.plugin = plugin; this.tab = "home"; this.taskView = "today"; this.taskVisualMode = "calendar"; this.taskVisualProject = ""; this.taskVisualPriority = ""; this.taskVisualStatus = "all"; this.timelineDays = 14; this.taskFilter = "active"; this.completedExpanded = false; this.focusPath = ""; this.selectedTaskPath = ""; this.taskSearch = ""; this.knowledgeFilter = "all"; this.knowledgeSearch = ""; this.calendarMonth = this.monthStart(new Date()); }
   getViewType() { return VIEW_TYPE; }
   getDisplayText() { return "Focus Workbench"; }
   getIcon() { return "layout-dashboard"; }
@@ -149,6 +149,11 @@ class FocusWorkbenchView extends ItemView {
     return Number.isFinite(parsed.getTime()) ? parsed : null;
   }
   today() { const date = new Date(); date.setHours(0, 0, 0, 0); return date; }
+  monthStart(value) { return new Date(value.getFullYear(), value.getMonth(), 1); }
+  daysInMonth(value) { return new Date(value.getFullYear(), value.getMonth() + 1, 0).getDate(); }
+  calendarDateKey(year, month, day) { return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`; }
+  calendarMonthLabel() { return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long" }).format(this.calendarMonth); }
+  changeCalendarMonth(offset) { this.calendarMonth = new Date(this.calendarMonth.getFullYear(), this.calendarMonth.getMonth() + offset, 1); void this.render(); }
   dateKey(value) { const date = value || this.today(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
   calendarKey(value) {
     if (!value) return "";
@@ -343,62 +348,156 @@ class FocusWorkbenchView extends ItemView {
     });
   }
 
-  async renderTasks(shell) {
-    const cfg = this.config(); const tasks = this.tasks(); const active = tasks.filter(file => !this.taskDone(file)); const today = this.today();
-    if (!this.app.vault.getAbstractFileByPath(cfg.taskBase)) {
-      const setup = shell.createEl("section", { cls: "pvd-card pvd-source-warning" });
-      setup.createEl("h2", { text: "尚未指定任务总表" });
-      setup.createEl("p", { text: "插件仍可读取任务笔记，但请在插件设置中指定现有 .base 文件，或一键创建统一的任务总表。" });
-      this.button(setup, "打开插件设置", () => { this.app.setting.open(); this.app.setting.openTabById(this.plugin.manifest.id); }, "mod-cta");
+  renderTaskCalendar(shell, tasks) {
+    const month = this.calendarMonth; const year = month.getFullYear(); const monthIndex = month.getMonth(); const todayKey = this.todayKey();
+    const card = shell.createEl("section", { cls: "pvd-card pvd-task-calendar" });
+    const header = card.createDiv({ cls: "pvd-calendar-header" });
+    const copy = header.createDiv(); copy.createEl("p", { text: "TASK CALENDAR" }); copy.createEl("h2", { text: this.calendarMonthLabel() });
+    const controls = header.createDiv({ cls: "pvd-calendar-controls" });
+    this.button(controls, "‹ 上月", () => this.changeCalendarMonth(-1));
+    this.button(controls, "本月", () => { this.calendarMonth = this.monthStart(new Date()); void this.render(); }, "mod-cta");
+    this.button(controls, "下月 ›", () => this.changeCalendarMonth(1));
+    const weekday = card.createDiv({ cls: "pvd-calendar-weekdays" }); ["一", "二", "三", "四", "五", "六", "日"].forEach(day => weekday.createEl("span", { text: day }));
+    const grid = card.createDiv({ cls: "pvd-calendar-grid" }); const firstOffset = (month.getDay() + 6) % 7; const days = this.daysInMonth(month);
+    for (let index = 0; index < firstOffset; index += 1) grid.createDiv({ cls: "pvd-calendar-day is-empty", attr: { "aria-hidden": "true" } });
+    for (let day = 1; day <= days; day += 1) {
+      const dateKey = this.calendarDateKey(year, monthIndex, day); const dayTasks = tasks.filter(file => this.taskPlanKey(file) === dateKey).sort((a, b) => this.compareTasks(a, b));
+      const dayEl = grid.createDiv({ cls: `pvd-calendar-day ${dateKey === todayKey ? "is-today" : ""} ${dayTasks.length ? "has-tasks" : ""}` });
+      const label = dayEl.createDiv({ cls: "pvd-calendar-day-label" }); label.createEl("strong", { text: String(day) }); if (dateKey === todayKey) label.createSpan({ text: "今天" });
+      const list = dayEl.createDiv({ cls: "pvd-calendar-task-list" });
+      dayTasks.slice(0, 3).forEach(file => { const chip = this.button(list, file.basename, () => { this.focusPath = file.path; this.selectedTaskPath = file.path; void this.render(); }, `pvd-calendar-task ${this.taskDone(file) ? "is-done" : ""} ${this.priority(file).toLowerCase()}`); chip.setAttribute("title", `${file.basename} · ${this.taskStatus(file)}`); });
+      if (dayTasks.length > 3) dayEl.createEl("span", { cls: "pvd-calendar-more", text: `+${dayTasks.length - 3} 项任务` });
     }
-    const summary = shell.createDiv({ cls: "pvd-task-summary" });
-    const todayKey = this.calendarKey(today);
-    [["今日", active.filter(file => this.isTodayTask(file, todayKey)).length], ["进行中", active.filter(file => this.taskStatus(file) === "进行中").length], ["已逾期", active.filter(file => this.isPastCalendarDay(this.taskPlanKey(file), today)).length], ["待推进", active.length]].forEach(([label, count]) => { const stat = summary.createDiv(); stat.createEl("b", { text: String(count) }); stat.createSpan({ text: label }); });
-    const filters = { today: "今日", active: "全部待办", doing: "进行中", overdue: "已逾期", done: "已完成" };
-    const focus = this.focusTask(tasks);
-    if (focus) {
-      const mission = shell.createEl("section", { cls: "pvd-card pvd-mission pvd-water-focus-v2" });
-      const missionHead = mission.createDiv({ cls: "pvd-mission-head" });
-      const missionCopy = missionHead.createDiv({ cls: "pvd-mission-copy" });
-      missionCopy.createEl("p", { text: "CURRENT FOCUS" });
-      missionCopy.createEl("h2", { text: focus.basename });
-      const missionMeta = missionCopy.createDiv({ cls: "pvd-mission-meta" });
-      this.timer(missionMeta, focus);
-      const project = String(this.taskProperty(focus, "projectField") || "未关联项目").replace(/^\[\[|\]\]$/g, "");
-      missionMeta.createSpan({ text: `${project} · ${this.priority(focus)}` });
-      this.countdownLiquid(mission, focus);
-      const track = mission.createDiv({ cls: "pvd-stage" }); ["待做", "进行中", "暂停", "完成"].forEach(stage => track.createEl("span", { text: stage, cls: this.taskStatus(focus) === stage ? "is-current" : this.taskDone(focus) ? "is-done" : "" }));
-      const missionActions = mission.createDiv({ cls: "pvd-actions" }); this.button(missionActions, this.timerState(focus) === "进行中" ? "暂停专注" : "开始专注", () => this.toggleTimer(focus), "mod-cta"); this.button(missionActions, "编辑", () => this.editTask(focus)); this.button(missionActions, "完成", () => this.complete(focus));
-      const switcher = mission.createDiv({ cls: "pvd-focus-switcher" }); switcher.createSpan({ text: "切换焦点" }); const chips = switcher.createDiv(); active.sort((a, b) => this.compareTasks(a, b)).slice(0, 6).forEach(file => this.button(chips, file.basename, () => this.setFocus(file), file.path === focus.path ? "is-active" : ""));
-    }
-    const controls = shell.createEl("section", { cls: "pvd-card pvd-task-controls" });
-    const toolbar = controls.createDiv({ cls: "pvd-task-toolbar" });
-    const search = toolbar.createEl("input", { cls: "pvd-task-search", type: "search", placeholder: "搜索任务、项目或优先级…", value: this.taskSearch, attr: { "aria-label": "搜索任务" } });
-    search.addEventListener("input", event => { this.taskSearch = event.target.value; void this.renderTasksResults(this.taskResultsEl, filters); });
-    this.button(toolbar, "＋ 新建任务", () => this.createTask(), "mod-cta");
-    const filterBar = controls.createDiv({ cls: "pvd-filter" });
-    Object.entries(filters).forEach(([key, label]) => this.button(filterBar, label, async () => { this.taskFilter = key; await this.render(); }, this.taskFilter === key ? "is-active" : ""));
-    const results = shell.createDiv({ cls: "pvd-task-results" });
-    this.taskResultsEl = results;
-    await this.renderTasksResults(results, filters, tasks, today);
+    const trailing = (7 - ((firstOffset + days) % 7)) % 7; for (let index = 0; index < trailing; index += 1) grid.createDiv({ cls: "pvd-calendar-day is-empty", attr: { "aria-hidden": "true" } });
   }
 
-  async renderTasksResults(parent, filters, suppliedTasks, suppliedToday) {
+  renderFocusPanel(parent, tasks) {
+    const active = tasks.filter(file => !this.taskDone(file)); const focus = this.focusTask(tasks);
+    const mission = parent.createEl("section", { cls: "pvd-card pvd-mission pvd-water-focus-v2" });
+    if (!focus) { mission.createEl("p", { text: "CURRENT FOCUS" }); mission.createEl("h2", { text: "还没有待推进的任务" }); this.button(mission, "新建任务", () => this.createTask(), "mod-cta"); return; }
+    const missionHead = mission.createDiv({ cls: "pvd-mission-head" }); const missionCopy = missionHead.createDiv({ cls: "pvd-mission-copy" });
+    missionCopy.createEl("p", { text: "CURRENT FOCUS" }); missionCopy.createEl("h2", { text: focus.basename });
+    const missionMeta = missionCopy.createDiv({ cls: "pvd-mission-meta" }); this.timer(missionMeta, focus);
+    const project = String(this.taskProperty(focus, "projectField") || "未关联项目").replace(/^\[\[|\]\]$/g, ""); missionMeta.createSpan({ text: `${project} · ${this.priority(focus)}` });
+    this.countdownLiquid(mission, focus);
+    const track = mission.createDiv({ cls: "pvd-stage" }); ["待做", "进行中", "暂停", "完成"].forEach(stage => track.createEl("span", { text: stage, cls: this.taskStatus(focus) === stage ? "is-current" : this.taskDone(focus) ? "is-done" : "" }));
+    const actions = mission.createDiv({ cls: "pvd-actions" }); this.button(actions, this.timerState(focus) === "进行中" ? "暂停专注" : "开始专注", () => this.toggleTimer(focus), "mod-cta"); this.button(actions, "编辑", () => this.editTask(focus)); this.button(actions, "完成", () => this.complete(focus));
+    const switcher = mission.createDiv({ cls: "pvd-focus-switcher" }); switcher.createSpan({ text: "切换焦点" }); const chips = switcher.createDiv(); active.sort((a, b) => this.compareTasks(a, b)).slice(0, 6).forEach(file => this.button(chips, file.basename, () => this.setFocus(file), file.path === focus.path ? "is-active" : ""));
+  }
+
+  visualTasks(tasks) {
+    return tasks.filter(file => {
+      const project = String(this.taskProperty(file, "projectField") || "").replace(/^\[\[|\]\]$/g, "");
+      if (this.taskVisualProject && project !== this.taskVisualProject) return false;
+      if (this.taskVisualPriority && this.priority(file) !== this.taskVisualPriority) return false;
+      if (this.taskVisualStatus === "active" && this.taskDone(file)) return false;
+      if (this.taskVisualStatus === "doing" && this.taskStatus(file) !== "进行中") return false;
+      if (this.taskVisualStatus === "done" && !this.taskDone(file)) return false;
+      return true;
+    });
+  }
+  selectVisual(parent, value, options, onChange, label) {
+    const select = parent.createEl("select", { cls: "pvd-visual-select", attr: { "aria-label": label } });
+    options.forEach(([optionValue, text]) => select.createEl("option", { value: optionValue, text })); select.value = value;
+    select.addEventListener("change", event => { onChange(event.target.value); void this.render(); }); return select;
+  }
+  visualModeButton(parent, key, label) {
+    const paths = {
+      calendar: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+      timeline: '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/>',
+      stats: '<path d="M3 3v18h18"/><path d="M7 16v-4M12 16V7M17 16v-7"/>'
+    };
+    const button = parent.createEl("button", { cls: `pvd-visual-mode is-${key} ${this.taskVisualMode === key ? "is-active" : ""}`, attr: { title: label, "aria-label": label } });
+    button.createSpan({ cls: "pvd-view-icon", attr: { "aria-hidden": "true" } }).innerHTML = `<svg width="16" height="16" style="display:block;width:16px;height:16px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[key]}</svg>`;
+    button.createSpan({ text: label }); button.addEventListener("click", () => { this.taskVisualMode = key; void this.render(); }); return button;
+  }
+  renderTaskVisualControls(parent, tasks) {
+    const tools = parent.createDiv({ cls: "pvd-visual-controls" }); const modes = tools.createDiv({ cls: "pvd-visual-tabs" });
+    [["calendar", "日历"], ["timeline", "时间轴"], ["stats", "统计"]].forEach(([key, label]) => this.visualModeButton(modes, key, label));
+    const filters = tools.createDiv({ cls: "pvd-visual-filters" });
+    const projects = [...new Set(tasks.map(file => String(this.taskProperty(file, "projectField") || "").replace(/^\[\[|\]\]$/g, "")).filter(Boolean))].sort((a, b) => a.localeCompare(b, "zh-CN"));
+    this.selectVisual(filters, this.taskVisualProject, [["", "全部项目"], ...projects.map(value => [value, value])], value => { this.taskVisualProject = value; }, "项目筛选");
+    this.selectVisual(filters, this.taskVisualPriority, [["", "全部优先级"], ["P0", "P0"], ["P1", "P1"], ["P2", "P2"]], value => { this.taskVisualPriority = value; }, "优先级筛选");
+    this.selectVisual(filters, this.taskVisualStatus, [["all", "全部状态"], ["active", "未完成"], ["doing", "进行中"], ["done", "已完成"]], value => { this.taskVisualStatus = value; }, "状态筛选");
+  }
+  renderTimeline(parent, tasks) {
+    const today = this.today(); const pastDays = this.timelineDays === 7 ? 2 : this.timelineDays === 14 ? 3 : 7; const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - pastDays); const dates = Array.from({ length: this.timelineDays }, (_, index) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + index));
+    const startKey = this.dateKey(start); const endKey = this.dateKey(dates[dates.length - 1]); const scheduled = tasks.filter(file => { const key = this.taskPlanKey(file); return key >= startKey && key <= endKey; });
+    const card = parent.createEl("section", { cls: "pvd-card pvd-timeline" }); card.style.setProperty("--pvd-timeline-days", String(this.timelineDays)); card.style.setProperty("--pvd-timeline-width", `${140 + this.timelineDays * 46}px`); const head = card.createDiv({ cls: "pvd-section-head" }); const copy = head.createDiv(); copy.createEl("h2", { text: "任务时间轴" }); copy.createEl("p", { text: `以今天为中心查看 ${this.timelineDays} 天排期，按项目分组显示。` });
+    const ranges = head.createDiv({ cls: "pvd-timeline-ranges" }); [7, 14, 30].forEach(days => this.button(ranges, `${days} 天`, () => { this.timelineDays = days; void this.render(); }, this.timelineDays === days ? "is-active" : ""));
+    const board = card.createDiv({ cls: "pvd-timeline-board" }); const months = board.createDiv({ cls: "pvd-timeline-months" }); months.createSpan({ cls: "pvd-timeline-corner", text: "项目" }); const monthGroups = []; dates.forEach((date, index) => { const key = `${date.getFullYear()}-${date.getMonth()}`; const current = monthGroups[monthGroups.length - 1]; if (current && current.key === key) current.count += 1; else monthGroups.push({ key, start: index, count: 1, label: `${date.getFullYear()} 年 ${date.getMonth() + 1} 月` }); }); monthGroups.forEach(month => { const label = months.createSpan({ text: month.label }); label.style.gridColumn = `${month.start + 2} / span ${month.count}`; });
+    const header = board.createDiv({ cls: "pvd-timeline-header" }); header.createSpan({ text: "排期" }); dates.forEach(date => { const day = header.createSpan(); day.createEl("b", { text: String(date.getDate()) }); day.createEl("em", { text: ["日", "一", "二", "三", "四", "五", "六"][date.getDay()] }); if (this.dateKey(date) === this.todayKey()) day.addClass("is-today"); });
+    const groups = new Map(); scheduled.forEach(file => { const project = String(this.taskProperty(file, "projectField") || "未关联项目").replace(/^\[\[|\]\]$/g, ""); if (!groups.has(project)) groups.set(project, []); groups.get(project).push(file); });
+    if (!groups.size) board.createEl("p", { cls: "pvd-timeline-empty", text: "当前日期范围内没有已排期任务。" });
+    groups.forEach((files, project) => { files.sort((a, b) => this.compareTasks(a, b)); const lane = board.createDiv({ cls: "pvd-timeline-lane" }); const laneRows = Math.max(files.length, 1); lane.style.setProperty("--pvd-lane-rows", String(laneRows)); lane.style.minHeight = `${laneRows * 36 + 18}px`; const label = lane.createDiv({ cls: "pvd-timeline-project" }); label.createEl("strong", { text: project }); label.createSpan({ text: `${files.length} 项` }); const track = lane.createDiv({ cls: "pvd-timeline-track" }); dates.forEach((date, index) => { const cell = track.createDiv({ cls: "pvd-timeline-cell" }); cell.style.gridColumn = String(index + 1); }); const todayIndex = dates.findIndex(date => this.dateKey(date) === this.todayKey()); if (todayIndex >= 0) { const marker = track.createDiv({ cls: "pvd-timeline-today-line", attr: { "aria-hidden": "true" } }); marker.style.gridColumn = String(todayIndex + 1); } files.forEach((file, rowIndex) => { const key = this.taskPlanKey(file); const index = dates.findIndex(date => this.dateKey(date) === key); if (index < 0) return; const chip = this.button(track, file.basename, () => { this.focusPath = file.path; this.selectedTaskPath = file.path; void this.render(); }, `pvd-timeline-task ${this.priority(file).toLowerCase()} ${this.taskDone(file) ? "is-done" : ""}`); chip.style.gridColumn = String(index + 1); chip.style.gridRow = String(rowIndex + 1); chip.setAttribute("title", `${file.basename} · ${key} · ${this.taskStatus(file)}`); }); });
+    const overdue = tasks.filter(file => !this.taskDone(file) && this.taskPlanKey(file) && this.taskPlanKey(file) < startKey); const unscheduled = tasks.filter(file => !this.taskPlanKey(file));
+    const foot = card.createDiv({ cls: "pvd-timeline-foot" }); if (overdue.length) foot.createSpan({ text: `范围外逾期 ${overdue.length} 项` }); if (unscheduled.length) foot.createSpan({ text: `未排期 ${unscheduled.length} 项` });
+  }
+  renderTaskStats(parent, tasks) {
+    const total = tasks.length; const completed = tasks.filter(file => this.taskDone(file)); const active = tasks.filter(file => !this.taskDone(file)); const doing = active.filter(file => this.taskStatus(file) === "进行中"); const overdue = active.filter(file => this.isPastCalendarDay(this.taskPlanKey(file), this.today()));
+    const card = parent.createEl("section", { cls: "pvd-card pvd-task-stats-view" }); card.createEl("h2", { text: "任务统计" }); card.createEl("p", { text: "统计基于当前筛选条件，不改变任务数据。" });
+    const statIcons = { active: '<path d="M5 12h14M12 5l7 7-7 7"/>', doing: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>', done: '<circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.2 2.2 4.8-5"/>', overdue: '<path d="M12 8v5M12 17h.01"/><path d="M10.3 3.7 2.5 17.2A2 2 0 0 0 4.2 20h15.6a2 2 0 0 0 1.7-2.8L13.7 3.7a2 2 0 0 0-3.4 0Z"/>' };
+    const metrics = [["active", "待推进", active.length], ["doing", "进行中", doing.length], ["done", "已完成", completed.length], ["overdue", "已逾期", overdue.length]]; const summary = card.createDiv({ cls: "pvd-stats-grid" }); metrics.forEach(([tone, label, count]) => { const item = summary.createDiv({ cls: `is-${tone}` }); const icon = item.createSpan({ cls: "pvd-stat-icon", attr: { "aria-hidden": "true", style: "display:grid;width:28px;height:28px;overflow:hidden;place-items:center" } }); icon.innerHTML = `<svg width="15" height="15" style="display:block;width:15px;height:15px;max-width:15px;max-height:15px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${statIcons[tone]}</svg>`; item.createEl("b", { text: String(count) }); item.createSpan({ cls: "pvd-stat-label", text: label }); });
+    const maxMetric = Math.max(...metrics.map(([, , count]) => count), 1); const chart = card.createDiv({ cls: "pvd-stats-chart" }); const chartHead = chart.createDiv({ cls: "pvd-stats-chart-head" }); const chartTitle = chartHead.createDiv(); chartTitle.createEl("h3", { text: "任务状态分布" }); chartTitle.createEl("p", { text: `共 ${total} 项任务 · 完成率 ${total ? Math.round(completed.length / total * 100) : 0}%` }); chartHead.createSpan({ text: "当前筛选" }); const plot = chart.createDiv({ cls: "pvd-chart-plot" }); const grid = plot.createDiv({ cls: "pvd-chart-grid", attr: { "aria-hidden": "true" } }); [100, 75, 50, 25, 0].forEach(value => grid.createSpan({ attr: { style: `--pvd-grid:${value}%` } })); const bars = plot.createDiv({ cls: "pvd-chart-bars" }); metrics.forEach(([tone, label, count]) => { const column = bars.createDiv({ cls: `pvd-chart-column is-${tone}` }); column.createEl("b", { text: String(count) }); const bar = column.createDiv({ cls: "pvd-chart-bar", attr: { title: `${label}：${count} 项` } }); bar.style.setProperty("--pvd-bar-height", `${count ? Math.max(8, Math.round(count / maxMetric * 100)) : 2}%`); column.createSpan({ text: label }); });
+    const analysis = card.createDiv({ cls: "pvd-stats-analysis" }); const priority = analysis.createDiv({ cls: "pvd-stats-panel" }); priority.createEl("h3", { text: "优先级分布" }); ["P0", "P1", "P2"].forEach(level => { const count = active.filter(file => this.priority(file) === level).length; const row = priority.createDiv({ cls: "pvd-stats-row" }); row.createSpan({ text: level }); const bar = row.createDiv({ cls: "pvd-stats-bar" }); bar.createSpan({ attr: { style: `width:${active.length ? Math.round(count / active.length * 100) : 0}%` } }); row.createEl("b", { text: String(count) }); });
+    const projects = analysis.createDiv({ cls: "pvd-stats-panel" }); projects.createEl("h3", { text: "项目进展" }); const grouped = new Map(); tasks.forEach(file => { const project = String(this.taskProperty(file, "projectField") || "未关联项目").replace(/^\[\[|\]\]$/g, ""); if (!grouped.has(project)) grouped.set(project, []); grouped.get(project).push(file); }); [...grouped.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 6).forEach(([project, files]) => { const done = files.filter(file => this.taskDone(file)).length; const row = projects.createDiv({ cls: "pvd-stats-row" }); row.createSpan({ text: project }); const bar = row.createDiv({ cls: "pvd-stats-bar" }); bar.createSpan({ attr: { style: `width:${files.length ? Math.round(done / files.length * 100) : 0}%` } }); row.createEl("b", { text: `${done}/${files.length}` }); });
+  }
+
+  async renderTasks(shell) {
+    const tasks = this.tasks(); const active = tasks.filter(file => !this.taskDone(file)); const today = this.today(); const todayKey = this.calendarKey(today);
+    const todayCount = active.filter(file => this.isTodayTask(file, todayKey)).length; const doingCount = active.filter(file => this.taskStatus(file) === "进行中").length; const overdueCount = active.filter(file => this.isPastCalendarDay(this.taskPlanKey(file), today)).length;
+    const views = shell.createDiv({ cls: "pvd-task-view-tabs" });
+    [["today", "今日任务"], ["visual", "任务视图"], ["all", "全部任务"]].forEach(([key, label]) => this.button(views, label, () => { this.taskView = key; if (key === "today") this.taskFilter = "today"; if (key === "all" && this.taskFilter === "today") this.taskFilter = "active"; void this.render(); }, this.taskView === key ? "is-active" : ""));
+    const overview = shell.createDiv({ cls: "pvd-task-overview" });
+    const overviewText = this.taskView === "today" ? `今日 ${todayCount} 项 · 进行中 ${doingCount} 项 · 已逾期 ${overdueCount} 项` : this.taskView === "visual" ? `${this.taskVisualMode === "calendar" ? this.calendarMonthLabel() : this.taskVisualMode === "timeline" ? `${this.timelineDays} 天排期` : "当前筛选"} · 已应用项目、优先级与状态筛选` : `待推进 ${active.length} 项 · 进行中 ${doingCount} 项 · 已逾期 ${overdueCount} 项`;
+    overview.createEl("span", { text: overviewText });
+    const workspace = shell.createDiv({ cls: `pvd-task-workspace is-${this.taskView}` }); const main = workspace.createDiv({ cls: "pvd-task-main" }); const sidebar = workspace.createDiv({ cls: "pvd-task-sidebar" });
+    this.renderFocusPanel(sidebar, tasks);
+    const filters = { today: "今日", active: "全部待办", doing: "进行中", overdue: "已逾期" };
+    if (this.taskView === "visual") {
+      workspace.addClass("pvd-visual-workspace-v5"); workspace.addClass("pvd-visual-workspace-v7"); main.addClass("pvd-visual-v5"); main.addClass("pvd-visual-v7");
+      this.renderTaskVisualControls(main, tasks); const visualTasks = this.visualTasks(tasks);
+      if (this.taskVisualMode === "calendar") this.renderTaskCalendar(main, visualTasks);
+      else if (this.taskVisualMode === "timeline") this.renderTimeline(main, visualTasks);
+      else this.renderTaskStats(main, visualTasks);
+      return;
+    }
+    if (this.taskView === "all") {
+      const controls = main.createEl("section", { cls: "pvd-card pvd-task-controls" }); const toolbar = controls.createDiv({ cls: "pvd-task-toolbar" });
+      const search = toolbar.createEl("input", { cls: "pvd-task-search", type: "search", placeholder: "搜索任务、项目或优先级…", value: this.taskSearch, attr: { "aria-label": "搜索任务" } });
+      search.addEventListener("input", event => { this.taskSearch = event.target.value; void this.renderTasksResults(this.taskResultsEl, filters, tasks, today, this.taskFilter, true); });
+      this.button(toolbar, "＋ 新建任务", () => this.createTask(), "mod-cta");
+      const filterBar = controls.createDiv({ cls: "pvd-filter" }); Object.entries(filters).forEach(([key, label]) => this.button(filterBar, label, () => { this.taskFilter = key; void this.render(); }, this.taskFilter === key ? "is-active" : ""));
+      const results = main.createDiv({ cls: "pvd-task-results" }); this.taskResultsEl = results; await this.renderTasksResults(results, filters, tasks, today, this.taskFilter, true); return;
+    }
+    await this.renderTasksResults(main, filters, tasks, today, "today", false);
+  }
+
+  matchesTaskSearch(file) {
+    const query = this.taskSearch.trim().toLocaleLowerCase(); if (!query) return true;
+    const project = String(this.taskProperty(file, "projectField") || "");
+    return `${file.basename} ${project} ${this.priority(file)} ${this.taskStatus(file)}`.toLocaleLowerCase().includes(query);
+  }
+  renderCompletedTasks(parent, tasks) {
+    const completed = tasks.filter(file => this.taskDone(file) && this.matchesTaskSearch(file)).sort((a, b) => b.stat.mtime - a.stat.mtime);
+    if (!completed.length) return;
+    const section = parent.createEl("section", { cls: `pvd-card pvd-completed-tasks ${this.completedExpanded ? "is-expanded" : ""}` });
+    const toggle = this.button(section, `已完成 · ${completed.length} 项`, () => { this.completedExpanded = !this.completedExpanded; void this.render(); }, "pvd-completed-toggle");
+    toggle.setAttribute("aria-expanded", String(this.completedExpanded));
+    if (this.completedExpanded) { const list = section.createDiv({ cls: "pvd-completed-list" }); completed.forEach(file => this.renderTaskCard(list, file)); }
+  }
+  async renderTasksResults(parent, filters, suppliedTasks, suppliedToday, filterKey = this.taskFilter, showCompleted = false) {
     const tasks = suppliedTasks || this.tasks(); const today = suppliedToday || this.today();
     parent.empty();
     const filtered = tasks.filter(file => {
-      const plan = this.taskPlan(file); if (this.taskFilter === "today") return this.isTodayTask(file, this.calendarKey(today));
-      if (this.taskFilter === "active") return !this.taskDone(file); if (this.taskFilter === "doing") return !this.taskDone(file) && this.taskStatus(file) === "进行中";
-      if (this.taskFilter === "overdue") return !this.taskDone(file) && this.isPastCalendarDay(this.taskPlanKey(file), today); return this.taskDone(file);
-    }).filter(file => {
-      const query = this.taskSearch.trim().toLocaleLowerCase();
-      if (!query) return true;
-      const project = String(this.taskProperty(file, "projectField") || "");
-      return `${file.basename} ${project} ${this.priority(file)} ${this.taskStatus(file)}`.toLocaleLowerCase().includes(query);
-    }).sort((a, b) => this.compareTasks(a, b));
-    const board = parent.createEl("section", { cls: "pvd-card pvd-board" }); board.createEl("h2", { text: `${filters[this.taskFilter]} · ${filtered.length} 项` });
+      if (filterKey === "today") return this.isTodayTask(file, this.calendarKey(today));
+      if (filterKey === "active") return !this.taskDone(file); if (filterKey === "doing") return !this.taskDone(file) && this.taskStatus(file) === "进行中";
+      return !this.taskDone(file) && this.isPastCalendarDay(this.taskPlanKey(file), today);
+    }).filter(file => this.matchesTaskSearch(file)).sort((a, b) => this.compareTasks(a, b));
+    const board = parent.createEl("section", { cls: "pvd-card pvd-board" }); board.createEl("h2", { text: `${filters[filterKey]} · ${filtered.length} 项` });
     if (!filtered.length) board.createEl("p", { text: "这里还没有任务。" });
     filtered.forEach(file => this.renderTaskCard(board, file));
+    if (showCompleted) this.renderCompletedTasks(parent, tasks);
   }
 
   renderTaskCard(parent, file) {
@@ -429,9 +528,10 @@ class FocusWorkbenchView extends ItemView {
     return "";
   }
   uniquePath(dir, title) { const date = this.dateKey(); let path = `${dir}/${date} ${title}.md`; let index = 2; while (this.app.vault.getAbstractFileByPath(path)) path = `${dir}/${date} ${title} ${index++}.md`; return path; }
+  uniqueTaskPath(dir, title) { let path = `${dir}/${title}.md`; let index = 2; while (this.app.vault.getAbstractFileByPath(path)) path = `${dir}/${title} ${index++}.md`; return path; }
   async createIdea() { new TextPromptModal(this.app, "记录灵感", "一句话写下想法", async title => { const dir = this.config().inbox; await this.ensureFolder(dir); const file = await this.app.vault.create(this.uniquePath(dir, title), `---\ntype: 闪念笔记\n状态: 收集\ndate: ${this.dateKey()}\n---\n\n# ${title}\n\n`); await this.openFile(file); await this.render(); }, title => this.validateNoteTitle(title)).open(); }
   async archiveIdea(file) { await this.app.fileManager.processFrontMatter(file, fm => { fm["状态"] = "已处理"; }); new Notice("灵感已标记为已处理"); await this.render(); }
-  async createTask() { new TextPromptModal(this.app, "新建任务", "任务标题", async title => { const dir = this.config().task; await this.ensureFolder(dir); const file = await this.app.vault.create(this.uniquePath(dir, title), await this.newTaskContent(title)); await this.openFile(file); await this.render(); }, title => this.validateNoteTitle(title)).open(); }
+  async createTask() { new TextPromptModal(this.app, "新建任务", "任务标题", async title => { const dir = this.config().task; await this.ensureFolder(dir); const file = await this.app.vault.create(this.uniqueTaskPath(dir, title), await this.newTaskContent(title)); await this.openFile(file); await this.render(); }, title => this.validateNoteTitle(title)).open(); }
   escapeRegExp(text) { return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
   setFrontmatterField(source, field, value) { return source.replace(new RegExp(`^(${this.escapeRegExp(field)}\\s*:).*$`, "m"), (match, prefix) => `${prefix} ${value}`); }
   async newTaskContent(title) {
@@ -541,9 +641,35 @@ class FocusWorkbenchSettingTab extends PluginSettingTab {
   }
 }
 
+const VISUAL_RUNTIME_STYLE_ID = "pvd-visual-runtime-v7";
+const VISUAL_RUNTIME_CSS = `
+.pvd-visual-workspace-v5{grid-template-columns:minmax(0,1fr) minmax(260px,310px)!important;gap:18px!important}
+.pvd-visual-v5{gap:14px!important;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}
+.pvd-visual-v5 .pvd-timeline,.pvd-visual-v5 .pvd-task-stats-view{display:grid!important;gap:14px!important;overflow:visible!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;transform:none!important}
+.pvd-visual-v5 .pvd-timeline>.pvd-section-head{min-height:48px!important;padding:0 2px!important}.pvd-visual-v5 .pvd-timeline .pvd-section-head h2,.pvd-visual-v5 .pvd-task-stats-view>h2{margin:0!important;color:#302e36!important;font:700 20px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important;letter-spacing:-.015em!important}.pvd-visual-v5 .pvd-timeline .pvd-section-head p,.pvd-visual-v5 .pvd-task-stats-view>p{color:#8b8994!important;font:500 11px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-task-stats-view>p{margin:-9px 0 0!important}
+.pvd-visual-v5 .pvd-timeline-board{overflow-x:auto!important;border:1px solid rgba(88,83,115,.12)!important;border-radius:12px!important;background:#fff!important;box-shadow:0 8px 24px rgba(56,48,91,.05)!important}.pvd-visual-v5 .pvd-timeline-months,.pvd-visual-v5 .pvd-timeline-header,.pvd-visual-v5 .pvd-timeline-lane{display:grid!important;grid-template-columns:140px repeat(var(--pvd-timeline-days),minmax(46px,1fr))!important;width:max(100%,var(--pvd-timeline-width))!important;min-width:var(--pvd-timeline-width)!important}.pvd-visual-v5 .pvd-timeline-months{min-height:34px!important;border-bottom:1px solid #eceaf0!important;background:#faf9fc!important}.pvd-visual-v5 .pvd-timeline-months>span{display:flex!important;align-items:center!important;padding:0 10px!important;border-left:1px solid #efedf2!important;color:#55525e!important;font:600 10px/1 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-timeline-months .pvd-timeline-corner{grid-column:1!important;border-left:0!important}.pvd-visual-v5 .pvd-timeline-header{min-height:46px!important;padding:0!important;border-bottom:1px solid #eceaf0!important;background:#fff!important}.pvd-visual-v5 .pvd-timeline-header>span{display:grid!important;align-content:center!important;gap:4px!important;border-left:1px solid #f0eef3!important;color:#9a98a1!important;text-align:center!important}.pvd-visual-v5 .pvd-timeline-header>span:first-child{padding-left:10px!important;border-left:0!important;text-align:left!important}.pvd-visual-v5 .pvd-timeline-header b{font:600 10px/1 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-timeline-header em{font:500 8px/1 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important;font-style:normal!important}.pvd-visual-v5 .pvd-timeline-header .is-today b{display:grid!important;width:22px!important;height:22px!important;margin:auto!important;place-items:center!important;border-radius:50%!important;background:#7357d7!important;color:#fff!important}
+.pvd-visual-v5 .pvd-timeline-lane{border-bottom:1px solid #eceaf0!important}.pvd-visual-v5 .pvd-timeline-project{display:flex!important;flex-direction:column!important;justify-content:center!important;min-width:0!important;padding:10px 12px!important;border-right:1px solid #eceaf0!important;background:#fbfafc!important}.pvd-visual-v5 .pvd-timeline-project strong{overflow:hidden!important;color:#4d4a55!important;font:600 11px/1.25 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important;text-overflow:ellipsis!important;white-space:nowrap!important}.pvd-visual-v5 .pvd-timeline-project span{margin-top:5px!important;color:#aaa7b0!important;font:500 9px/1 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-timeline-track{display:grid!important;grid-template-columns:repeat(var(--pvd-timeline-days),minmax(46px,1fr))!important;grid-template-rows:repeat(var(--pvd-lane-rows),36px)!important;position:relative!important;align-content:center!important;background:transparent!important}.pvd-visual-v5 .pvd-timeline-cell{grid-row:1/-1!important;border-right:1px solid #f0eef3!important}.pvd-visual-v5 .pvd-timeline-task{z-index:2!important;align-self:center!important;width:max-content!important;max-width:170px!important;min-height:25px!important;margin:0 4px!important;padding:4px 8px!important;border:0!important;border-radius:5px!important;background:#e9f3fb!important;box-shadow:none!important;color:#3878a4!important;font:600 10px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}.pvd-visual-v5 .pvd-timeline-task.p0{background:#fbe7eb!important;color:#ae4f62!important}.pvd-visual-v5 .pvd-timeline-task.p1{background:#faeed9!important;color:#956822!important}
+.pvd-visual-v5 .pvd-stats-grid{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:0!important;overflow:hidden!important;border:1px solid #eceaf0!important;border-radius:11px!important;background:#fff!important;box-shadow:0 6px 18px rgba(56,48,91,.04)!important}.pvd-visual-v5 .pvd-stats-grid>div{display:grid!important;grid-template-columns:28px 1fr!important;grid-template-areas:"icon value" "icon label"!important;column-gap:9px!important;min-height:66px!important;padding:11px 12px!important;border:0!important;border-right:1px solid #eceaf0!important;border-radius:0!important;background:#fff!important;box-shadow:none!important}.pvd-visual-v5 .pvd-stats-grid>div:last-child{border-right:0!important}.pvd-visual-v5 .pvd-stat-icon{grid-area:icon!important;display:grid!important;width:28px!important;height:28px!important;min-width:28px!important;min-height:28px!important;margin:0!important;padding:0!important;place-items:center!important;border-radius:7px!important;overflow:hidden!important}.pvd-visual-v5 .pvd-stat-icon svg{display:block!important;width:15px!important;height:15px!important;max-width:15px!important;max-height:15px!important}.pvd-visual-v5 .pvd-stats-grid b{grid-area:value!important;align-self:end!important;color:#403d47!important;font:700 20px/1 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-stats-grid .pvd-stat-label{grid-area:label!important;align-self:start!important;margin-top:3px!important;color:#85818b!important;font:500 10px/1 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}
+.pvd-visual-v5 .pvd-stat-icon{background:#eee9ff!important;color:#6d51ca!important}.pvd-visual-v5 .is-doing .pvd-stat-icon{background:#e3f2ff!important;color:#418bc8!important}.pvd-visual-v5 .is-done .pvd-stat-icon{background:#e5f7ef!important;color:#3d9a73!important}.pvd-visual-v5 .is-overdue .pvd-stat-icon{background:#ffe8ee!important;color:#bf5870!important}
+.pvd-visual-v5 .pvd-stats-chart,.pvd-visual-v5 .pvd-stats-panel{border:1px solid #eceaf0!important;border-radius:11px!important;background:#fff!important;box-shadow:0 6px 18px rgba(56,48,91,.04)!important}.pvd-visual-v5 .pvd-stats-chart{display:grid!important;gap:12px!important;padding:16px 18px 14px!important}.pvd-visual-v5 .pvd-stats-chart-head{display:flex!important;align-items:flex-start!important;justify-content:space-between!important;gap:16px!important}.pvd-visual-v5 .pvd-stats-chart-head h3,.pvd-visual-v5 .pvd-stats-panel h3{margin:0!important;color:#44414b!important;font:650 14px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-stats-chart-head p{margin:5px 0 0!important;color:#99969f!important;font:500 10px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-stats-chart-head>span{padding:5px 7px!important;border-radius:5px!important;background:#f0edf8!important;color:#71658c!important;font:600 9px/1 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-chart-plot{position:relative!important;height:210px!important;border-bottom:1px solid #dedbe3!important}.pvd-visual-v5 .pvd-chart-grid{position:absolute!important;inset:0!important}.pvd-visual-v5 .pvd-chart-grid span{position:absolute!important;right:0!important;left:0!important;bottom:var(--pvd-grid)!important;height:1px!important;border-top:1px dashed #eceaf0!important}.pvd-visual-v5 .pvd-chart-bars{position:absolute!important;inset:0 4%!important;display:grid!important;grid-template-columns:repeat(4,minmax(50px,1fr))!important;align-items:end!important;gap:7%!important}.pvd-visual-v5 .pvd-chart-column{display:grid!important;grid-template-rows:18px minmax(0,1fr) 24px!important;align-items:end!important;height:100%!important;justify-items:center!important;color:#85818b!important}.pvd-visual-v5 .pvd-chart-column>b,.pvd-visual-v5 .pvd-chart-column>span{color:#6d6974!important;font:600 10px/1 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-chart-bar{align-self:end!important;width:min(34px,48%)!important;height:var(--pvd-bar-height)!important;min-height:2px!important;border-radius:5px 5px 2px 2px!important;background:#8167df!important;box-shadow:none!important}.pvd-visual-v5 .pvd-chart-column.is-doing .pvd-chart-bar{background:#58a6df!important}.pvd-visual-v5 .pvd-chart-column.is-done .pvd-chart-bar{background:#4caf83!important}.pvd-visual-v5 .pvd-chart-column.is-overdue .pvd-chart-bar{background:#df6b82!important}.pvd-visual-v5 .pvd-stats-analysis{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}.pvd-visual-v5 .pvd-stats-panel{display:grid!important;gap:11px!important;padding:14px 15px!important}.pvd-visual-v5 .pvd-stats-row{display:grid!important;grid-template-columns:minmax(72px,1fr) minmax(80px,2fr) auto!important;align-items:center!important;gap:10px!important;color:#85818b!important;font:500 10px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-stats-bar{height:5px!important;overflow:hidden!important;border-radius:999px!important;background:#f0eef3!important}.pvd-visual-v5 .pvd-stats-bar span{display:block!important;height:100%!important;border-radius:inherit!important;background:#8167df!important}
+@media(max-width:900px){.pvd-visual-workspace-v5{grid-template-columns:1fr!important}.pvd-visual-v5 .pvd-stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+/* v7 theme: Focus Workbench surfaces with Notion-inspired data structures. */
+.pvd-visual-v7{--v7-purple:#7857df;--v7-blue:#52a5e3;--v7-ink:#2e3040;--v7-muted:#7189a0;--v7-line:rgba(99,126,158,.13)}
+.pvd-visual-v7 .pvd-visual-controls{padding:8px 10px!important;border:1px solid rgba(255,255,255,.88)!important;border-radius:18px!important;background:rgba(255,255,255,.61)!important;box-shadow:0 12px 30px rgba(74,77,122,.08),inset 0 1px 0 #fff!important;backdrop-filter:blur(16px)!important}.pvd-visual-v7 .pvd-visual-tabs .pvd-visual-mode{min-height:38px!important;border-radius:12px!important;color:#66839d!important;font:800 12px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-visual-tabs .pvd-visual-mode.is-active{background:linear-gradient(135deg,#eee9ff,#e3ddff)!important;box-shadow:0 5px 14px rgba(112,80,207,.13)!important;color:#674bc4!important}.pvd-visual-v7 .pvd-visual-select{min-height:36px!important;border:1px solid rgba(105,126,158,.14)!important;border-radius:11px!important;background:rgba(255,255,255,.78)!important;color:#668099!important;font:800 11px "Nunito","Microsoft YaHei",sans-serif!important}
+.pvd-visual-v7 .pvd-timeline,.pvd-visual-v7 .pvd-task-stats-view{gap:18px!important;padding:26px!important;border:1px solid rgba(255,255,255,.90)!important;border-radius:30px!important;background:linear-gradient(145deg,rgba(255,255,255,.91),rgba(239,247,255,.76))!important;box-shadow:0 22px 52px rgba(77,78,124,.11),inset 0 1px 0 #fff!important}
+.pvd-visual-v7 .pvd-timeline>.pvd-section-head{min-height:58px!important;padding:0!important}.pvd-visual-v7 .pvd-timeline .pvd-section-head h2,.pvd-visual-v7 .pvd-task-stats-view>h2{color:var(--v7-ink)!important;font:900 clamp(27px,2.7vw,35px)/1.12 "Nunito","Microsoft YaHei",sans-serif!important;letter-spacing:-.03em!important}.pvd-visual-v7 .pvd-timeline .pvd-section-head p,.pvd-visual-v7 .pvd-task-stats-view>p{color:var(--v7-muted)!important;font:700 12px/1.5 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-task-stats-view>p{margin:-12px 0 0!important}
+.pvd-visual-v7 .pvd-timeline-ranges{padding:5px!important;border:1px solid rgba(255,255,255,.88)!important;border-radius:15px!important;background:rgba(255,255,255,.63)!important;box-shadow:0 8px 20px rgba(66,83,121,.07)!important}.pvd-visual-v7 .pvd-timeline-ranges button{min-height:36px!important;padding:0 12px!important;border-radius:11px!important;color:#6c86a0!important;font:800 11px "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-timeline-ranges button.is-active{background:linear-gradient(135deg,#8b70ed,#7151d5)!important;box-shadow:0 7px 16px rgba(112,78,209,.20)!important;color:#fff!important}
+.pvd-visual-v7 .pvd-timeline-board{border:1px solid rgba(255,255,255,.91)!important;border-radius:20px!important;background:rgba(255,255,255,.67)!important;box-shadow:0 12px 30px rgba(72,86,125,.08),inset 0 1px 0 #fff!important}.pvd-visual-v7 .pvd-timeline-months{min-height:40px!important;border-bottom-color:var(--v7-line)!important;background:linear-gradient(90deg,rgba(243,239,255,.76),rgba(235,247,255,.72))!important}.pvd-visual-v7 .pvd-timeline-months>span{border-left-color:var(--v7-line)!important;color:#536e88!important;font:900 11px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-timeline-header{min-height:52px!important;border-bottom-color:var(--v7-line)!important;background:rgba(255,255,255,.73)!important}.pvd-visual-v7 .pvd-timeline-header>span{border-left-color:rgba(103,132,166,.09)!important;color:#8da3b8!important}.pvd-visual-v7 .pvd-timeline-header b{font:900 11px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-timeline-header em{font:700 8px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-timeline-header .is-today b{width:24px!important;height:24px!important;background:linear-gradient(135deg,#8b70ed,#7151d5)!important;box-shadow:0 5px 12px rgba(112,78,209,.22)!important}
+.pvd-visual-v7 .pvd-timeline-lane{border-bottom-color:var(--v7-line)!important}.pvd-visual-v7 .pvd-timeline-project{border-right-color:var(--v7-line)!important;background:rgba(248,250,255,.70)!important}.pvd-visual-v7 .pvd-timeline-project strong{color:#4d6a84!important;font:900 11px/1.25 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-timeline-project span{color:#91a6b8!important;font:800 9px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-timeline-cell{border-right-color:rgba(102,133,168,.09)!important}.pvd-visual-v7 .pvd-timeline-task{min-height:28px!important;padding:5px 9px!important;border:1px solid rgba(79,155,213,.12)!important;border-radius:9px!important;background:linear-gradient(135deg,#e8f6ff,#dceeff)!important;box-shadow:0 5px 12px rgba(68,133,186,.10)!important;color:#347cab!important;font:800 10px/1.2 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-timeline-task.p0{background:linear-gradient(135deg,#ffeaf0,#ffdde6)!important;color:#b45169!important}.pvd-visual-v7 .pvd-timeline-task.p1{background:linear-gradient(135deg,#fff4dc,#ffebc8)!important;color:#a36f20!important}
+.pvd-visual-v7 .pvd-stats-grid{gap:11px!important;overflow:visible!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}.pvd-visual-v7 .pvd-stats-grid>div{min-height:88px!important;padding:15px!important;border:1px solid rgba(255,255,255,.90)!important;border-radius:19px!important;background:rgba(255,255,255,.69)!important;box-shadow:0 10px 24px rgba(70,78,122,.07),inset 0 1px 0 #fff!important}.pvd-visual-v7 .pvd-stat-icon{width:38px!important;height:38px!important;min-width:38px!important;min-height:38px!important;border-radius:13px!important}.pvd-visual-v7 .pvd-stat-icon svg{width:19px!important;height:19px!important;max-width:19px!important;max-height:19px!important}.pvd-visual-v7 .pvd-stats-grid b{color:#353747!important;font:900 27px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-stats-grid .pvd-stat-label{color:#748ca3!important;font:800 10px/1 "Nunito","Microsoft YaHei",sans-serif!important}
+.pvd-visual-v7 .pvd-stats-chart,.pvd-visual-v7 .pvd-stats-panel{border:1px solid rgba(255,255,255,.91)!important;border-radius:21px!important;background:rgba(255,255,255,.61)!important;box-shadow:0 12px 28px rgba(70,78,122,.07),inset 0 1px 0 #fff!important}.pvd-visual-v7 .pvd-stats-chart{padding:20px 22px 17px!important}.pvd-visual-v7 .pvd-stats-chart-head h3,.pvd-visual-v7 .pvd-stats-panel h3{color:#3c3e50!important;font:900 15px/1.2 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-stats-chart-head p{color:#8298ac!important;font:700 10px/1.3 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-stats-chart-head>span{padding:7px 10px!important;border-radius:10px!important;background:#eee9ff!important;color:#6c51c7!important;font:800 9px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-chart-plot{height:230px!important;border-bottom-color:rgba(104,128,158,.18)!important}.pvd-visual-v7 .pvd-chart-grid span{border-color:rgba(104,128,158,.11)!important}.pvd-visual-v7 .pvd-chart-bar{width:min(42px,52%)!important;border-radius:9px 9px 3px 3px!important;background:linear-gradient(180deg,#ae96f6,#7758de)!important;box-shadow:0 9px 18px rgba(119,85,220,.17)!important}.pvd-visual-v7 .pvd-chart-column.is-doing .pvd-chart-bar{background:linear-gradient(180deg,#86c9f4,#50a1df)!important}.pvd-visual-v7 .pvd-chart-column.is-done .pvd-chart-bar{background:linear-gradient(180deg,#7ed8b2,#45a77d)!important}.pvd-visual-v7 .pvd-chart-column.is-overdue .pvd-chart-bar{background:linear-gradient(180deg,#f49caf,#df687f)!important}.pvd-visual-v7 .pvd-chart-column>b,.pvd-visual-v7 .pvd-chart-column>span{color:#6b8196!important;font:800 10px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-stats-panel{padding:18px!important}.pvd-visual-v7 .pvd-stats-row{color:#7189a0!important;font:800 10px/1.2 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-stats-bar{height:7px!important;background:rgba(111,128,160,.12)!important}.pvd-visual-v7 .pvd-stats-bar span{background:linear-gradient(90deg,#a089ee,#7657da)!important}
+@media(max-width:720px){.pvd-visual-v7 .pvd-timeline,.pvd-visual-v7 .pvd-task-stats-view{padding:18px!important;border-radius:23px!important}.pvd-visual-v7 .pvd-stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.pvd-visual-v7 .pvd-stats-grid>div{min-height:76px!important}.pvd-visual-v7 .pvd-chart-plot{height:190px!important}}`;
+
 module.exports = class FocusWorkbenchPlugin extends Plugin {
   async onload() {
     await this.loadSettings();
+    document.getElementById(VISUAL_RUNTIME_STYLE_ID)?.remove();
+    const visualStyle = document.createElement("style"); visualStyle.id = VISUAL_RUNTIME_STYLE_ID; visualStyle.textContent = VISUAL_RUNTIME_CSS; document.head.appendChild(visualStyle); this.register(() => visualStyle.remove());
     this.registerView(VIEW_TYPE, leaf => new FocusWorkbenchView(leaf, this));
     this.addSettingTab(new FocusWorkbenchSettingTab(this.app, this));
     this.addRibbonIcon("layout-dashboard", "打开 Focus Workbench", () => this.activateView());
@@ -560,8 +686,10 @@ module.exports = class FocusWorkbenchPlugin extends Plugin {
     }
     await workspace.revealLeaf(leaf);
   }
-  onunload() { this.app.workspace.detachLeavesOfType(VIEW_TYPE); }
+  onunload() { document.getElementById(VISUAL_RUNTIME_STYLE_ID)?.remove(); this.app.workspace.detachLeavesOfType(VIEW_TYPE); }
 };
+
+/* nosourcemap */
 
 /* nosourcemap */
 
