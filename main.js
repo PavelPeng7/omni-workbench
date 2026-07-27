@@ -19,6 +19,7 @@ class TextPromptModal extends Modal {
   constructor(app, title, placeholder, submit, validate = () => "") { super(app); this.title = title; this.placeholder = placeholder; this.submit = submit; this.validate = validate; }
   onOpen() {
     const { contentEl } = this;
+    this.modalEl.addClass("pvd-modal-shell");
     contentEl.addClass("pvd-modal");
     contentEl.createEl("h2", { text: this.title });
     const input = contentEl.createEl("input", { type: "text", placeholder: this.placeholder });
@@ -34,7 +35,7 @@ class TextPromptModal extends Modal {
 class TaskEditorModal extends Modal {
   constructor(app, file, data, projects, submit) { super(app); this.file = file; this.data = data; this.projects = projects; this.submit = submit; }
   onOpen() {
-    const { contentEl } = this; contentEl.addClass("pvd-modal"); const data = this.data;
+    const { contentEl } = this; this.modalEl.addClass("pvd-modal-shell"); contentEl.addClass("pvd-modal"); const data = this.data;
     contentEl.createEl("h2", { text: `编辑任务：${this.file.basename}` });
     const form = contentEl.createDiv({ cls: "pvd-task-editor" });
     const field = (label, element) => { const row = form.createEl("label"); row.createSpan({ text: label }); row.appendChild(element); return element; };
@@ -56,7 +57,7 @@ class TaskEditorModal extends Modal {
 class SetupModal extends Modal {
   constructor(app, plugin) { super(app); this.plugin = plugin; }
   onOpen() {
-    const { contentEl } = this; contentEl.addClass("pvd-modal"); contentEl.createEl("h2", { text: "初始化 Focus Workbench" });
+    const { contentEl } = this; this.modalEl.addClass("pvd-modal-shell"); contentEl.addClass("pvd-modal"); contentEl.createEl("h2", { text: "初始化 Focus Workbench" });
     contentEl.createEl("p", { text: "选择你的任务目录，并映射现有任务的字段名称。不会修改已有笔记。" });
     const form = contentEl.createDiv({ cls: "pvd-task-editor" }); const settings = this.plugin.settings; const schema = Object.assign({}, DEFAULT_SETTINGS.schema, settings.schema || {});
     const fields = [

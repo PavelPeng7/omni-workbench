@@ -1,6 +1,6 @@
 {
   "name": "obsidian-ultra-dashboard",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "description": "A local-first dashboard and task workbench for Obsidian.",
   "scripts": {
