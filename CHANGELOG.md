@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.3
+
+### Fixed
+
+- Global shortcuts (N, Cmd/Ctrl+K) no longer fire while typing in the editor, form fields, or other panes; they only respond when the workbench is the active leaf.
+- Creating notes with an IME no longer submits early when Enter confirms a composition candidate.
+- Re-rendering preserves the scroll position and search-box focus instead of jumping back to the top.
+- Full dark theme support for the dashboard and the calendar, timeline, and statistics views.
+- Deleting a task and initializing the folder structure now use an in-app confirm dialog that also works on mobile.
+- Task templates missing a mapped frontmatter field now get the field appended instead of silently dropping the value.
+
+### Changed
+
+- Selecting a task card no longer changes the current focus; use the new "设为焦点" action, the focus switcher, or start a focus session.
+- The statistics status chart uses mutually exclusive buckets (待做/进行中/暂停/已完成) instead of overlapping counts.
+- Completed tasks sort by completion date, falling back to modification time.
+- The workbench opens in a main-area tab instead of a split.
+- Stale focus sessions (running over 12 hours) are auto-paused periodically while the view stays open, not only when it opens.
+- Knowledge tab filter buttons update results in place, like the search box.
+
 ## 0.2.8
 
 ### Added

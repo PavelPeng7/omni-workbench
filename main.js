@@ -27,8 +27,24 @@ class TextPromptModal extends Modal {
     const save = actions.createEl("button", { text: "创建", cls: "mod-cta" });
     const commit = async () => { const value = input.value.trim(); const error = this.validate(value); if (error) { new Notice(error); return; } await this.submit(value); this.close(); };
     save.addEventListener("click", () => void commit());
-    input.addEventListener("keydown", event => { if (event.key === "Enter") void commit(); });
+    input.addEventListener("keydown", event => { if (event.isComposing || event.keyCode === 229) return; if (event.key === "Enter") void commit(); });
     window.setTimeout(() => input.focus(), 0);
+  }
+}
+
+class ConfirmModal extends Modal {
+  constructor(app, title, message, confirmText, onConfirm) { super(app); this.title = title; this.message = message; this.confirmText = confirmText; this.onConfirm = onConfirm; }
+  onOpen() {
+    const { contentEl } = this;
+    this.modalEl.addClass("pvd-modal-shell");
+    contentEl.addClass("pvd-modal");
+    contentEl.createEl("h2", { text: this.title });
+    contentEl.createEl("p", { text: this.message });
+    const actions = contentEl.createDiv({ cls: "pvd-modal-actions" });
+    const cancel = actions.createEl("button", { text: "取消" });
+    const ok = actions.createEl("button", { text: this.confirmText, cls: "mod-cta" });
+    cancel.addEventListener("click", () => this.close());
+    ok.addEventListener("click", async () => { await this.onConfirm(); this.close(); });
   }
 }
 
@@ -189,9 +205,15 @@ class FocusWorkbenchView extends ItemView {
   compareTasks(a, b) { const rank = { P0: 0, P1: 1, P2: 2 }; return rank[this.priority(a)] - rank[this.priority(b)] || (this.taskPlan(a)?.getTime() || Infinity) - (this.taskPlan(b)?.getTime() || Infinity) || a.basename.localeCompare(b.basename, "zh-CN"); }
   focusTask(tasks) { const active = tasks.filter(file => !this.taskDone(file)); return active.find(file => file.path === this.focusPath) || active.find(file => this.timerState(file) === "进行中") || active.filter(file => this.isTodayTask(file)).sort((a, b) => this.compareTasks(a, b))[0] || active.sort((a, b) => this.compareTasks(a, b))[0]; }
   async setFocus(file) { this.focusPath = file.path; await this.render(); }
-  selectTask(file) { this.selectedTaskPath = this.selectedTaskPath === file.path ? "" : file.path; this.focusPath = file.path; void this.render(); }
+  // Selection only expands the card; focus changes go through setFocus (切换焦点 / 设为焦点 / 开始专注).
+  selectTask(file) { this.selectedTaskPath = this.selectedTaskPath === file.path ? "" : file.path; void this.render(); }
   handleShortcut(event) {
-    if (event.defaultPrevented || event.altKey || (event.target && /input|textarea|select/i.test(event.target.tagName))) return;
+    if (event.defaultPrevented || event.altKey) return;
+    const target = event.target;
+    // Never steal keys from text entry: form fields, contenteditable, and the CodeMirror editor.
+    if (target && (/(input|textarea|select)/i.test(target.tagName || "") || target.isContentEditable || (typeof target.closest === "function" && target.closest(".cm-editor")))) return;
+    if (target && target !== document.body && target !== document.documentElement && !this.contentEl.contains(target)) return;
+    if ((!target || target === document.body || target === document.documentElement) && this.app.workspace.activeLeaf !== this.leaf) return;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); this.tab = "tasks"; this.taskSearch = ""; void this.render().then(() => this.contentEl.querySelector(".pvd-task-search")?.focus()); }
     if (event.key.toLowerCase() === "n" && !event.ctrlKey && !event.metaKey) { event.preventDefault(); void this.createTask(); }
   }
@@ -226,6 +248,9 @@ class FocusWorkbenchView extends ItemView {
     return liquid;
   }
   updateTimers() {
+    // Re-check long-running sessions periodically, not just when the view opens.
+    this.timerTick = (this.timerTick || 0) + 1;
+    if (this.timerTick % 300 === 0) void this.reconcileStaleTimers();
     this.contentEl.querySelectorAll("[data-pvd-timer]").forEach(element => {
       const file = this.app.vault.getAbstractFileByPath(element.getAttribute("data-pvd-timer"));
       if (!file || file.children) return;
@@ -255,6 +280,12 @@ class FocusWorkbenchView extends ItemView {
   async render() {
     await this.refreshTaskSource();
     const root = this.contentEl;
+    const previousTab = this.renderedTab;
+    const scrollTop = previousTab === this.tab ? root.scrollTop : 0;
+    const focused = document.activeElement;
+    const refocus = focused && root.contains(focused) && /^(input|textarea)$/i.test(focused.tagName) && typeof focused.className === "string" && focused.className.includes("pvd-task-search")
+      ? { start: focused.selectionStart, end: focused.selectionEnd }
+      : null;
     root.empty();
     root.addClass("pvd-root");
     const shell = root.createDiv({ cls: "pvd-shell" });
@@ -270,6 +301,12 @@ class FocusWorkbenchView extends ItemView {
     this.button(nav, "打开任务总表", () => this.openFile(this.config().taskBase));
     this.button(nav, "刷新", () => this.render());
     if (this.tab === "home") await this.renderHome(shell); else if (this.tab === "tasks") await this.renderTasks(shell); else await this.renderKnowledge(shell);
+    this.renderedTab = this.tab;
+    root.scrollTop = scrollTop;
+    if (refocus) {
+      const search = root.querySelector(".pvd-task-search");
+      if (search) { search.focus(); try { search.setSelectionRange(refocus.start, refocus.end); } catch (error) { /* selection not supported on this input */ } }
+    }
   }
 
   async renderHome(shell) {
@@ -335,7 +372,8 @@ class FocusWorkbenchView extends ItemView {
     search.addEventListener("input", event => { this.knowledgeSearch = event.target.value; this.renderArticleResults(this.articleResultsEl, groups); });
     this.button(toolbar, "＋ 记录闪念", () => this.createIdea(), "mod-cta");
     const filters = shell.createDiv({ cls: "pvd-filter pvd-article-filter" });
-    [["all", "全部文章"], ...groups.map(group => [group.key, group.name])].forEach(([key, label]) => this.button(filters, label, () => { this.knowledgeFilter = key; void this.render(); }, this.knowledgeFilter === key ? "is-active" : ""));
+    // Partial update like the search box: keep scroll position and avoid rebuilding the whole tab.
+    [["all", "全部文章"], ...groups.map(group => [group.key, group.name])].forEach(([key, label]) => this.button(filters, label, event => { this.knowledgeFilter = key; filters.querySelectorAll("button").forEach(option => option.removeClass("is-active")); event.currentTarget.addClass("is-active"); this.renderArticleResults(this.articleResultsEl, groups); }, this.knowledgeFilter === key ? "is-active" : ""));
     const results = shell.createDiv({ cls: "pvd-article-results" }); this.articleResultsEl = results; this.renderArticleResults(results, groups);
   }
   renderArticleResults(parent, groups = this.knowledgeGroups()) {
@@ -439,7 +477,9 @@ class FocusWorkbenchView extends ItemView {
     const card = parent.createEl("section", { cls: "pvd-card pvd-task-stats-view" }); card.createEl("h2", { text: "任务统计" }); card.createEl("p", { text: "统计基于当前筛选条件，不改变任务数据。" });
     const statIcons = { active: '<path d="M5 12h14M12 5l7 7-7 7"/>', doing: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>', done: '<circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.2 2.2 4.8-5"/>', overdue: '<path d="M12 8v5M12 17h.01"/><path d="M10.3 3.7 2.5 17.2A2 2 0 0 0 4.2 20h15.6a2 2 0 0 0 1.7-2.8L13.7 3.7a2 2 0 0 0-3.4 0Z"/>' };
     const metrics = [["active", "待推进", active.length], ["doing", "进行中", doing.length], ["done", "已完成", completed.length], ["overdue", "已逾期", overdue.length]]; const summary = card.createDiv({ cls: "pvd-stats-grid" }); metrics.forEach(([tone, label, count]) => { const item = summary.createDiv({ cls: `is-${tone}` }); const icon = item.createSpan({ cls: "pvd-stat-icon", attr: { "aria-hidden": "true", style: "display:grid;width:28px;height:28px;overflow:hidden;place-items:center" } }); icon.innerHTML = `<svg width="15" height="15" style="display:block;width:15px;height:15px;max-width:15px;max-height:15px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${statIcons[tone]}</svg>`; item.createEl("b", { text: String(count) }); item.createSpan({ cls: "pvd-stat-label", text: label }); });
-    const maxMetric = Math.max(...metrics.map(([, , count]) => count), 1); const chart = card.createDiv({ cls: "pvd-stats-chart" }); const chartHead = chart.createDiv({ cls: "pvd-stats-chart-head" }); const chartTitle = chartHead.createDiv(); chartTitle.createEl("h3", { text: "任务状态分布" }); chartTitle.createEl("p", { text: `共 ${total} 项任务 · 完成率 ${total ? Math.round(completed.length / total * 100) : 0}%` }); chartHead.createSpan({ text: "当前筛选" }); const plot = chart.createDiv({ cls: "pvd-chart-plot" }); const grid = plot.createDiv({ cls: "pvd-chart-grid", attr: { "aria-hidden": "true" } }); [100, 75, 50, 25, 0].forEach(value => grid.createSpan({ attr: { style: `--pvd-grid:${value}%` } })); const bars = plot.createDiv({ cls: "pvd-chart-bars" }); metrics.forEach(([tone, label, count]) => { const column = bars.createDiv({ cls: `pvd-chart-column is-${tone}` }); column.createEl("b", { text: String(count) }); const bar = column.createDiv({ cls: "pvd-chart-bar", attr: { title: `${label}：${count} 项` } }); bar.style.setProperty("--pvd-bar-height", `${count ? Math.max(8, Math.round(count / maxMetric * 100)) : 2}%`); column.createSpan({ text: label }); });
+    // Chart bars must be mutually exclusive (待做/进行中/暂停/已完成); the KPI grid above intentionally shows overlapping counts.
+    const chartMetrics = [["todo", "待做", active.filter(file => this.taskStatus(file) === "待做").length], ["doing", "进行中", doing.length], ["paused", "暂停", active.filter(file => this.taskStatus(file) === "暂停").length], ["done", "已完成", completed.length]];
+    const maxMetric = Math.max(...chartMetrics.map(([, , count]) => count), 1); const chart = card.createDiv({ cls: "pvd-stats-chart" }); const chartHead = chart.createDiv({ cls: "pvd-stats-chart-head" }); const chartTitle = chartHead.createDiv(); chartTitle.createEl("h3", { text: "任务状态分布" }); chartTitle.createEl("p", { text: `共 ${total} 项任务 · 完成率 ${total ? Math.round(completed.length / total * 100) : 0}%` }); chartHead.createSpan({ text: "当前筛选" }); const plot = chart.createDiv({ cls: "pvd-chart-plot" }); const grid = plot.createDiv({ cls: "pvd-chart-grid", attr: { "aria-hidden": "true" } }); [100, 75, 50, 25, 0].forEach(value => grid.createSpan({ attr: { style: `--pvd-grid:${value}%` } })); const bars = plot.createDiv({ cls: "pvd-chart-bars" }); chartMetrics.forEach(([tone, label, count]) => { const column = bars.createDiv({ cls: `pvd-chart-column is-${tone}` }); column.createEl("b", { text: String(count) }); const bar = column.createDiv({ cls: "pvd-chart-bar", attr: { title: `${label}：${count} 项` } }); bar.style.setProperty("--pvd-bar-height", `${count ? Math.max(8, Math.round(count / maxMetric * 100)) : 2}%`); column.createSpan({ text: label }); });
     const analysis = card.createDiv({ cls: "pvd-stats-analysis" }); const priority = analysis.createDiv({ cls: "pvd-stats-panel" }); priority.createEl("h3", { text: "优先级分布" }); ["P0", "P1", "P2"].forEach(level => { const count = active.filter(file => this.priority(file) === level).length; const row = priority.createDiv({ cls: "pvd-stats-row" }); row.createSpan({ text: level }); const bar = row.createDiv({ cls: "pvd-stats-bar" }); bar.createSpan({ attr: { style: `width:${active.length ? Math.round(count / active.length * 100) : 0}%` } }); row.createEl("b", { text: String(count) }); });
     const projects = analysis.createDiv({ cls: "pvd-stats-panel" }); projects.createEl("h3", { text: "项目进展" }); const grouped = new Map(); tasks.forEach(file => { const project = String(this.taskProperty(file, "projectField") || "未关联项目").replace(/^\[\[|\]\]$/g, ""); if (!grouped.has(project)) grouped.set(project, []); grouped.get(project).push(file); }); [...grouped.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 6).forEach(([project, files]) => { const done = files.filter(file => this.taskDone(file)).length; const row = projects.createDiv({ cls: "pvd-stats-row" }); row.createSpan({ text: project }); const bar = row.createDiv({ cls: "pvd-stats-bar" }); bar.createSpan({ attr: { style: `width:${files.length ? Math.round(done / files.length * 100) : 0}%` } }); row.createEl("b", { text: `${done}/${files.length}` }); });
   }
@@ -480,7 +520,7 @@ class FocusWorkbenchView extends ItemView {
     return `${file.basename} ${project} ${this.priority(file)} ${this.taskStatus(file)}`.toLocaleLowerCase().includes(query);
   }
   renderCompletedTasks(parent, tasks) {
-    const completed = tasks.filter(file => this.taskDone(file) && this.matchesTaskSearch(file)).sort((a, b) => b.stat.mtime - a.stat.mtime);
+    const completed = tasks.filter(file => this.taskDone(file) && this.matchesTaskSearch(file)).sort((a, b) => this.calendarKey(this.taskProperty(b, "completedAtField")).localeCompare(this.calendarKey(this.taskProperty(a, "completedAtField"))) || b.stat.mtime - a.stat.mtime);
     if (!completed.length) return;
     const section = parent.createEl("section", { cls: `pvd-card pvd-completed-tasks ${this.completedExpanded ? "is-expanded" : ""}` });
     const toggle = this.button(section, `已完成 · ${completed.length} 项`, () => { this.completedExpanded = !this.completedExpanded; void this.render(); }, "pvd-completed-toggle");
@@ -513,7 +553,7 @@ class FocusWorkbenchView extends ItemView {
     if (!selected) return;
     const actions = card.createDiv({ cls: "pvd-actions pvd-task-actions" });
     const stop = action => async event => { event.stopPropagation(); await action(); };
-    if (!this.taskDone(file)) { this.button(actions, this.timerState(file) === "进行中" ? "暂停专注" : "开始专注", stop(() => this.toggleTimer(file)), "mod-cta"); this.button(actions, "标记完成", stop(() => this.complete(file))); }
+    if (!this.taskDone(file)) { this.button(actions, this.timerState(file) === "进行中" ? "暂停专注" : "开始专注", stop(() => this.toggleTimer(file)), "mod-cta"); this.button(actions, "标记完成", stop(() => this.complete(file))); if (this.focusPath !== file.path) this.button(actions, "设为焦点", stop(() => this.setFocus(file))); }
     this.button(actions, "编辑详情", stop(() => this.editTask(file)));
     this.button(actions, "打开笔记", stop(() => this.openFile(file)));
     this.button(actions, "删除", stop(() => this.deleteTask(file)), "pvd-danger");
@@ -534,7 +574,12 @@ class FocusWorkbenchView extends ItemView {
   async archiveIdea(file) { await this.app.fileManager.processFrontMatter(file, fm => { fm["状态"] = "已处理"; }); new Notice("灵感已标记为已处理"); await this.render(); }
   async createTask() { new TextPromptModal(this.app, "新建任务", "任务标题", async title => { const dir = this.config().task; await this.ensureFolder(dir); const file = await this.app.vault.create(this.uniqueTaskPath(dir, title), await this.newTaskContent(title)); await this.openFile(file); await this.render(); }, title => this.validateNoteTitle(title)).open(); }
   escapeRegExp(text) { return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
-  setFrontmatterField(source, field, value) { return source.replace(new RegExp(`^(${this.escapeRegExp(field)}\\s*:).*$`, "m"), (match, prefix) => `${prefix} ${value}`); }
+  setFrontmatterField(source, field, value) {
+    const pattern = new RegExp(`^(${this.escapeRegExp(field)}\\s*:).*$`, "m");
+    if (pattern.test(source)) return source.replace(pattern, (match, prefix) => `${prefix} ${value}`);
+    // Template lacks the field: append it inside the existing frontmatter block instead of dropping the value.
+    return source.replace(/^---\r?\n([\s\S]*?)\r?\n---/, (match, body) => `---\n${body}\n${field}: ${value}\n---`);
+  }
   async newTaskContent(title) {
     const schema = this.schema();
     const templatePath = this.plugin.settings.taskTemplatePath;
@@ -560,7 +605,7 @@ class FocusWorkbenchView extends ItemView {
       new Notice("任务已更新"); await this.render();
     }).open();
   }
-  async deleteTask(file) { if (!window.confirm(`将“${file.basename}”移入 Obsidian 回收站？`)) return; await this.app.fileManager.trashFile(file); new Notice("任务已移入回收站"); await this.render(); }
+  async deleteTask(file) { new ConfirmModal(this.app, "删除任务", `将“${file.basename}”移入 Obsidian 回收站？`, "删除", async () => { await this.app.fileManager.trashFile(file); new Notice("任务已移入回收站"); await this.render(); }).open(); }
   pauseTimerFrontmatter(fm) {
     const started = this.timestamp(fm[this.schema().timerStartedField]);
     if (fm[this.schema().timerStateField] === "进行中" && started) this.setTaskProperty(fm, "elapsedField", Math.max(0, Number(fm[this.schema().elapsedField]) || 0) + Math.max(0, Math.floor((Date.now() - started.getTime()) / 1000)));
@@ -608,15 +653,14 @@ class FocusWorkbenchSettingTab extends PluginSettingTab {
     containerEl.createEl("h2", { text: "Focus Workbench · 初始化与任务数据" });
     containerEl.createEl("p", { text: "任务范围由任务目录和字段映射决定。.base 文件仅作为可选的 Obsidian Bases 视图，插件不会解析或执行其中的筛选表达式。" });
     new Setting(containerEl).setName("初始化向导").setDesc("为当前 vault 选择任务目录、项目目录和核心 frontmatter 字段。不会改动已有笔记。").addButton(button => button.setButtonText("打开向导").setCta().onClick(() => new SetupModal(this.app, this.plugin).open()));
-    new Setting(containerEl).setName("初始化卡片笔记仓库结构").setDesc("创建闪念笔记、文献笔记、永久笔记、任务、项目与每日进展目录；不会覆盖或移动已有文件。").addButton(button => button.setButtonText("创建目录").setCta().onClick(async () => {
-      if (!window.confirm("将创建标准卡片笔记与任务目录。已有文件不会被修改，是否继续？")) return;
+    new Setting(containerEl).setName("初始化卡片笔记仓库结构").setDesc("创建闪念笔记、文献笔记、永久笔记、任务、项目与每日进展目录；不会覆盖或移动已有文件。").addButton(button => button.setButtonText("创建目录").setCta().onClick(() => new ConfirmModal(this.app, "初始化目录结构", "将创建标准卡片笔记与任务目录。已有文件不会被修改，是否继续？", "创建", async () => {
       const settings = this.plugin.settings; const goals = "目标与任务";
       const defaults = { inboxFolder: "闪念笔记", literatureFolder: "文献笔记", permanentFolder: "永久笔记", taskFolder: `${goals}/任务管理/任务`, projectFolder: `${goals}/任务管理/项目` };
       Object.entries(defaults).forEach(([key, value]) => { if (!settings[key]) settings[key] = value; });
       const folders = [settings.inboxFolder, settings.literatureFolder, settings.permanentFolder, settings.taskFolder, settings.projectFolder, `${goals}/任务管理/每日进展`];
       for (const folder of folders) { let current = ""; for (const part of folder.split("/").filter(Boolean)) { current = current ? `${current}/${part}` : part; if (!this.app.vault.getAbstractFileByPath(current)) await this.app.vault.createFolder(current); } }
       await this.plugin.saveSettings(); this.display(); new Notice("标准卡片笔记仓库结构已创建。");
-    }));
+    }).open()));
     new Setting(containerEl).setName("任务目录").setDesc("只读取此目录及子目录内、符合任务类型字段和值的 Markdown 文件。").addText(text => text.setPlaceholder("Tasks").setValue(this.plugin.settings.taskFolder).onChange(async value => { this.plugin.settings.taskFolder = value.trim().replace(/^\.\//, "").replace(/\/$/, ""); await this.plugin.saveSettings(); }));
     new Setting(containerEl).setName("项目目录").setDesc("编辑任务时用于生成所属项目下拉选项。").addText(text => text.setPlaceholder("Projects").setValue(this.plugin.settings.projectFolder).onChange(async value => { this.plugin.settings.projectFolder = value.trim().replace(/^\.\//, "").replace(/\/$/, ""); await this.plugin.saveSettings(); }));
     new Setting(containerEl).setName("任务模板路径").setDesc("新建任务时优先使用该 Markdown 模板，自动填写计划日期与创建日期，并替换首个一级标题；文件不存在时使用内置格式。").addText(text => text.setPlaceholder("模板/任务模板.md").setValue(this.plugin.settings.taskTemplatePath).onChange(async value => { this.plugin.settings.taskTemplatePath = value.trim().replace(/^\.\//, ""); await this.plugin.saveSettings(); }));
@@ -664,7 +708,56 @@ const VISUAL_RUNTIME_CSS = `
 .pvd-visual-v7 .pvd-timeline-lane{border-bottom-color:var(--v7-line)!important}.pvd-visual-v7 .pvd-timeline-project{border-right-color:var(--v7-line)!important;background:rgba(248,250,255,.70)!important}.pvd-visual-v7 .pvd-timeline-project strong{color:#4d6a84!important;font:900 11px/1.25 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-timeline-project span{color:#91a6b8!important;font:800 9px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-timeline-cell{border-right-color:rgba(102,133,168,.09)!important}.pvd-visual-v7 .pvd-timeline-task{min-height:28px!important;padding:5px 9px!important;border:1px solid rgba(79,155,213,.12)!important;border-radius:9px!important;background:linear-gradient(135deg,#e8f6ff,#dceeff)!important;box-shadow:0 5px 12px rgba(68,133,186,.10)!important;color:#347cab!important;font:800 10px/1.2 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-timeline-task.p0{background:linear-gradient(135deg,#ffeaf0,#ffdde6)!important;color:#b45169!important}.pvd-visual-v7 .pvd-timeline-task.p1{background:linear-gradient(135deg,#fff4dc,#ffebc8)!important;color:#a36f20!important}
 .pvd-visual-v7 .pvd-stats-grid{gap:11px!important;overflow:visible!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}.pvd-visual-v7 .pvd-stats-grid>div{min-height:88px!important;padding:15px!important;border:1px solid rgba(255,255,255,.90)!important;border-radius:19px!important;background:rgba(255,255,255,.69)!important;box-shadow:0 10px 24px rgba(70,78,122,.07),inset 0 1px 0 #fff!important}.pvd-visual-v7 .pvd-stat-icon{width:38px!important;height:38px!important;min-width:38px!important;min-height:38px!important;border-radius:13px!important}.pvd-visual-v7 .pvd-stat-icon svg{width:19px!important;height:19px!important;max-width:19px!important;max-height:19px!important}.pvd-visual-v7 .pvd-stats-grid b{color:#353747!important;font:900 27px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-stats-grid .pvd-stat-label{color:#748ca3!important;font:800 10px/1 "Nunito","Microsoft YaHei",sans-serif!important}
 .pvd-visual-v7 .pvd-stats-chart,.pvd-visual-v7 .pvd-stats-panel{border:1px solid rgba(255,255,255,.91)!important;border-radius:21px!important;background:rgba(255,255,255,.61)!important;box-shadow:0 12px 28px rgba(70,78,122,.07),inset 0 1px 0 #fff!important}.pvd-visual-v7 .pvd-stats-chart{padding:20px 22px 17px!important}.pvd-visual-v7 .pvd-stats-chart-head h3,.pvd-visual-v7 .pvd-stats-panel h3{color:#3c3e50!important;font:900 15px/1.2 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-stats-chart-head p{color:#8298ac!important;font:700 10px/1.3 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-stats-chart-head>span{padding:7px 10px!important;border-radius:10px!important;background:#eee9ff!important;color:#6c51c7!important;font:800 9px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-chart-plot{height:230px!important;border-bottom-color:rgba(104,128,158,.18)!important}.pvd-visual-v7 .pvd-chart-grid span{border-color:rgba(104,128,158,.11)!important}.pvd-visual-v7 .pvd-chart-bar{width:min(42px,52%)!important;border-radius:9px 9px 3px 3px!important;background:linear-gradient(180deg,#ae96f6,#7758de)!important;box-shadow:0 9px 18px rgba(119,85,220,.17)!important}.pvd-visual-v7 .pvd-chart-column.is-doing .pvd-chart-bar{background:linear-gradient(180deg,#86c9f4,#50a1df)!important}.pvd-visual-v7 .pvd-chart-column.is-done .pvd-chart-bar{background:linear-gradient(180deg,#7ed8b2,#45a77d)!important}.pvd-visual-v7 .pvd-chart-column.is-overdue .pvd-chart-bar{background:linear-gradient(180deg,#f49caf,#df687f)!important}.pvd-visual-v7 .pvd-chart-column>b,.pvd-visual-v7 .pvd-chart-column>span{color:#6b8196!important;font:800 10px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-stats-panel{padding:18px!important}.pvd-visual-v7 .pvd-stats-row{color:#7189a0!important;font:800 10px/1.2 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-stats-bar{height:7px!important;background:rgba(111,128,160,.12)!important}.pvd-visual-v7 .pvd-stats-bar span{background:linear-gradient(90deg,#a089ee,#7657da)!important}
-@media(max-width:720px){.pvd-visual-v7 .pvd-timeline,.pvd-visual-v7 .pvd-task-stats-view{padding:18px!important;border-radius:23px!important}.pvd-visual-v7 .pvd-stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.pvd-visual-v7 .pvd-stats-grid>div{min-height:76px!important}.pvd-visual-v7 .pvd-chart-plot{height:190px!important}}`;
+@media(max-width:720px){.pvd-visual-v7 .pvd-timeline,.pvd-visual-v7 .pvd-task-stats-view{padding:18px!important;border-radius:23px!important}.pvd-visual-v7 .pvd-stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.pvd-visual-v7 .pvd-stats-grid>div{min-height:76px!important}.pvd-visual-v7 .pvd-chart-plot{height:190px!important}}
+/* Exclusive status chart: todo uses the default violet bar; doing/done keep theirs. */
+.pvd-visual-v5 .pvd-chart-column.is-paused .pvd-chart-bar{background:#e3b23c!important}
+.pvd-visual-v7 .pvd-chart-column.is-todo .pvd-chart-bar{background:linear-gradient(180deg,#b3a6e8,#8f7ce0)!important}
+.pvd-visual-v7 .pvd-chart-column.is-paused .pvd-chart-bar{background:linear-gradient(180deg,#f2cd6e,#e0a92e)!important}
+/* Dark theme: remap hard-coded light surfaces to Obsidian-adjacent dark tones. */
+.theme-dark .pvd-visual-v7{--v7-ink:#e8e5f0;--v7-muted:#a6a1b3;--v7-line:rgba(255,255,255,.09)}
+.theme-dark .pvd-visual-v5 .pvd-timeline-board,.theme-dark .pvd-visual-v5 .pvd-timeline-header,.theme-dark .pvd-visual-v5 .pvd-stats-grid,.theme-dark .pvd-visual-v5 .pvd-stats-chart,.theme-dark .pvd-visual-v5 .pvd-stats-panel{background:#26242f!important;border-color:#3a3746!important;box-shadow:none!important}
+.theme-dark .pvd-visual-v5 .pvd-stats-grid>div{background:#26242f!important;border-color:#3a3746!important;box-shadow:none!important}
+.theme-dark .pvd-visual-v5 .pvd-timeline-months,.theme-dark .pvd-visual-v5 .pvd-timeline-project{background:#2c2a37!important;border-color:#3a3746!important}
+.theme-dark .pvd-visual-v5 .pvd-timeline-months>span,.theme-dark .pvd-visual-v5 .pvd-timeline-header b,.theme-dark .pvd-visual-v5 .pvd-timeline-header em{color:#a6a1b3!important}
+.theme-dark .pvd-visual-v5 .pvd-timeline-months>span,.theme-dark .pvd-visual-v5 .pvd-timeline-header>span{border-color:#3a3746!important}
+.theme-dark .pvd-visual-v5 .pvd-timeline-project strong{color:#e8e5f0!important}
+.theme-dark .pvd-visual-v5 .pvd-timeline-project span{color:#8a8696!important}
+.theme-dark .pvd-visual-v5 .pvd-timeline-lane,.theme-dark .pvd-visual-v5 .pvd-timeline-cell,.theme-dark .pvd-visual-v5 .pvd-timeline-months,.theme-dark .pvd-visual-v5 .pvd-timeline-header{border-color:#3a3746!important}
+.theme-dark .pvd-visual-v5 .pvd-timeline .pvd-section-head h2,.theme-dark .pvd-visual-v5 .pvd-task-stats-view>h2{color:#e8e5f0!important}
+.theme-dark .pvd-visual-v5 .pvd-timeline .pvd-section-head p,.theme-dark .pvd-visual-v5 .pvd-task-stats-view>p,.theme-dark .pvd-visual-v5 .pvd-stats-row,.theme-dark .pvd-visual-v5 .pvd-chart-column>b,.theme-dark .pvd-visual-v5 .pvd-chart-column>span{color:#a6a1b3!important}
+.theme-dark .pvd-visual-v5 .pvd-stats-grid b{color:#e8e5f0!important}
+.theme-dark .pvd-visual-v5 .pvd-stats-grid .pvd-stat-label,.theme-dark .pvd-visual-v5 .pvd-stats-chart-head p,.theme-dark .pvd-visual-v5 .pvd-stats-chart-head h3,.theme-dark .pvd-visual-v5 .pvd-stats-panel h3{color:#a6a1b3!important}
+.theme-dark .pvd-visual-v5 .pvd-stats-chart-head h3,.theme-dark .pvd-visual-v5 .pvd-stats-panel h3{color:#e8e5f0!important}
+.theme-dark .pvd-visual-v5 .pvd-stats-chart-head>span{background:#3b3750!important;color:#b9aee8!important}
+.theme-dark .pvd-visual-v5 .pvd-chart-grid span{border-top-color:#3a3746!important}
+.theme-dark .pvd-visual-v5 .pvd-chart-plot{border-bottom-color:#4a4658!important}
+.theme-dark .pvd-visual-v5 .pvd-stats-bar{background:#3a3746!important}
+.theme-dark .pvd-visual-v5 .pvd-timeline-task{background:rgba(88,140,190,.28)!important;color:#9fd0f0!important}
+.theme-dark .pvd-visual-v5 .pvd-timeline-task.p0{background:rgba(190,88,110,.30)!important;color:#f2a9b8!important}
+.theme-dark .pvd-visual-v5 .pvd-timeline-task.p1{background:rgba(200,160,70,.28)!important;color:#eed49a!important}
+.theme-dark .pvd-visual-v7 .pvd-visual-controls,.theme-dark .pvd-visual-v7 .pvd-timeline-ranges{background:rgba(38,36,50,.85)!important;border-color:rgba(255,255,255,.10)!important;box-shadow:0 12px 30px rgba(0,0,0,.35)!important;backdrop-filter:none!important}
+.theme-dark .pvd-visual-v7 .pvd-visual-tabs .pvd-visual-mode,.theme-dark .pvd-visual-v7 .pvd-timeline-ranges button{color:#a6a1b3!important}
+.theme-dark .pvd-visual-v7 .pvd-visual-tabs .pvd-visual-mode.is-active{background:linear-gradient(135deg,#4c4570,#3f3a5e)!important;color:#dcd6f5!important;box-shadow:0 5px 14px rgba(0,0,0,.35)!important}
+.theme-dark .pvd-visual-v7 .pvd-timeline-ranges button.is-active{background:linear-gradient(135deg,#7a63d8,#5f49b8)!important;color:#fff!important}
+.theme-dark .pvd-visual-v7 .pvd-visual-select{background:rgba(30,28,42,.9)!important;border-color:rgba(255,255,255,.12)!important;color:#c7c2d4!important}
+.theme-dark .pvd-visual-v7 .pvd-timeline,.theme-dark .pvd-visual-v7 .pvd-task-stats-view{background:linear-gradient(145deg,rgba(34,32,46,.96),rgba(30,32,46,.92))!important;border-color:rgba(255,255,255,.10)!important;box-shadow:0 22px 52px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.06)!important}
+.theme-dark .pvd-visual-v7 .pvd-timeline-board{background:rgba(30,28,42,.9)!important;border-color:rgba(255,255,255,.10)!important;box-shadow:none!important}
+.theme-dark .pvd-visual-v7 .pvd-timeline-months{background:linear-gradient(90deg,rgba(52,48,74,.85),rgba(44,48,72,.82))!important}
+.theme-dark .pvd-visual-v7 .pvd-timeline-header{background:rgba(38,36,52,.9)!important}
+.theme-dark .pvd-visual-v7 .pvd-timeline-header>span{color:#8a8696!important}
+.theme-dark .pvd-visual-v7 .pvd-timeline-project{background:rgba(42,40,56,.85)!important}
+.theme-dark .pvd-visual-v7 .pvd-timeline-project strong{color:#c7c2d4!important}
+.theme-dark .pvd-visual-v7 .pvd-timeline-task{background:linear-gradient(135deg,rgba(70,120,170,.4),rgba(58,105,155,.35))!important;color:#a8d8f2!important;border-color:rgba(120,180,230,.25)!important;box-shadow:none!important}
+.theme-dark .pvd-visual-v7 .pvd-timeline-task.p0{background:linear-gradient(135deg,rgba(180,80,105,.4),rgba(160,70,95,.35))!important;color:#f2aeb9!important}
+.theme-dark .pvd-visual-v7 .pvd-timeline-task.p1{background:linear-gradient(135deg,rgba(190,150,60,.4),rgba(170,132,50,.35))!important;color:#eed49a!important}
+.theme-dark .pvd-visual-v7 .pvd-stats-grid>div,.theme-dark .pvd-visual-v7 .pvd-stats-chart,.theme-dark .pvd-visual-v7 .pvd-stats-panel{background:rgba(38,36,52,.85)!important;border-color:rgba(255,255,255,.10)!important;box-shadow:0 10px 24px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.05)!important}
+.theme-dark .pvd-visual-v7 .pvd-stats-grid b{color:#e8e5f0!important}
+.theme-dark .pvd-visual-v7 .pvd-stats-grid .pvd-stat-label,.theme-dark .pvd-visual-v7 .pvd-stats-chart-head p,.theme-dark .pvd-visual-v7 .pvd-stats-row,.theme-dark .pvd-visual-v7 .pvd-chart-column>b,.theme-dark .pvd-visual-v7 .pvd-chart-column>span{color:#a6a1b3!important}
+.theme-dark .pvd-visual-v7 .pvd-stats-chart-head h3,.theme-dark .pvd-visual-v7 .pvd-stats-panel h3{color:#e8e5f0!important}
+.theme-dark .pvd-visual-v7 .pvd-stats-chart-head>span{background:#3b3750!important;color:#b9aee8!important}
+.theme-dark .pvd-visual-v7 .pvd-chart-grid span{border-color:rgba(255,255,255,.07)!important}
+.theme-dark .pvd-visual-v7 .pvd-chart-plot{border-bottom-color:rgba(255,255,255,.14)!important}
+.theme-dark .pvd-visual-v7 .pvd-stats-bar{background:rgba(255,255,255,.10)!important}`;
 
 module.exports = class FocusWorkbenchPlugin extends Plugin {
   async onload() {
@@ -682,13 +775,15 @@ module.exports = class FocusWorkbenchPlugin extends Plugin {
     const { workspace } = this.app;
     let leaf = workspace.getLeavesOfType(VIEW_TYPE)[0];
     if (!leaf) {
-      leaf = workspace.getLeaf(true);
+      leaf = workspace.getLeaf("tab");
       await leaf.setViewState({ type: VIEW_TYPE, active: true, state: {} });
     }
     await workspace.revealLeaf(leaf);
   }
   onunload() { document.getElementById(VISUAL_RUNTIME_STYLE_ID)?.remove(); this.app.workspace.detachLeavesOfType(VIEW_TYPE); }
 };
+
+/* nosourcemap */
 
 /* nosourcemap */
 
