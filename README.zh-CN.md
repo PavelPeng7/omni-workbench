@@ -1,25 +1,16 @@
 # Focus Workbench
 
-<p align="right">
-  <a href="README.md">
-    <img src="https://img.shields.io/badge/LANGUAGE-ENGLISH-5B5B5B?style=flat-square" alt="Read in English">
-  </a>
-  <a href="README.zh-CN.md">
-    <img src="https://img.shields.io/badge/%E8%AF%AD%E8%A8%80-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-7C3AED?style=flat-square" alt="阅读简体中文">
-  </a>
-</p>
-
 <p align="center">
   <a href="https://obsidian.md/">
-    <img src="https://img.shields.io/badge/OBSIDIAN-PLUGIN-7C3AED?style=flat-square&amp;logo=obsidian&amp;logoColor=white" alt="Obsidian 插件">
+    <img src="https://img.shields.io/badge/OBSIDIAN-1.9.14%2B-111111?style=flat-square&amp;logo=obsidian&amp;logoColor=white" height="28" alt="需要 Obsidian 1.9.14 或更高版本">
   </a>
-  <img src="https://img.shields.io/badge/VERSION-0.3.4-111111?style=flat-square" alt="版本 0.3.4">
-  <img src="https://img.shields.io/badge/OBSIDIAN-1.9.14%2B-7C3AED?style=flat-square" alt="需要 Obsidian 1.9.14 或更高版本">
-  <img src="https://img.shields.io/badge/NODE.JS-20%2B-339933?style=flat-square&amp;logo=nodedotjs&amp;logoColor=white" alt="需要 Node.js 20 或更高版本">
+  <img src="https://img.shields.io/badge/VERSION-0.3.4-65B500?style=flat-square" height="28" alt="版本 0.3.4">
   <a href="LICENSE">
-    <img src="https://img.shields.io/badge/LICENSE-MIT-F97316?style=flat-square" alt="MIT 许可证">
+    <img src="https://img.shields.io/badge/LICENSE-MIT-F97316?style=flat-square" height="28" alt="MIT 许可证">
   </a>
-  <img src="https://img.shields.io/badge/PRIVACY-LOCAL--FIRST-0284C7?style=flat-square" alt="本地优先">
+  <a href="README.md">
+    <img src="https://img.shields.io/badge/README-ENGLISH-0284C7?style=flat-square" height="28" alt="Read in English">
+  </a>
 </p>
 
 Focus Workbench 是一个为 Obsidian 打造的本地优先仪表盘和任务工作台。它将仓库中已有的 Markdown 笔记与 frontmatter 整合为专注工作主页，方便你随手记录想法、查看任务状态、选择当前专注任务并追踪用时，全程无需将笔记发送到外部服务。

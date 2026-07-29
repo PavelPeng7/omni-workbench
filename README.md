@@ -1,25 +1,16 @@
 # Focus Workbench
 
-<p align="right">
-  <a href="README.md">
-    <img src="https://img.shields.io/badge/LANGUAGE-ENGLISH-7C3AED?style=flat-square" alt="Read in English">
-  </a>
-  <a href="README.zh-CN.md">
-    <img src="https://img.shields.io/badge/%E8%AF%AD%E8%A8%80-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-5B5B5B?style=flat-square" alt="阅读简体中文">
-  </a>
-</p>
-
 <p align="center">
   <a href="https://obsidian.md/">
-    <img src="https://img.shields.io/badge/OBSIDIAN-PLUGIN-7C3AED?style=flat-square&amp;logo=obsidian&amp;logoColor=white" alt="Obsidian plugin">
+    <img src="https://img.shields.io/badge/OBSIDIAN-1.9.14%2B-111111?style=flat-square&amp;logo=obsidian&amp;logoColor=white" height="28" alt="Requires Obsidian 1.9.14 or newer">
   </a>
-  <img src="https://img.shields.io/badge/VERSION-0.3.4-111111?style=flat-square" alt="Version 0.3.4">
-  <img src="https://img.shields.io/badge/OBSIDIAN-1.9.14%2B-7C3AED?style=flat-square" alt="Requires Obsidian 1.9.14 or newer">
-  <img src="https://img.shields.io/badge/NODE.JS-20%2B-339933?style=flat-square&amp;logo=nodedotjs&amp;logoColor=white" alt="Requires Node.js 20 or newer">
+  <img src="https://img.shields.io/badge/VERSION-0.3.4-65B500?style=flat-square" height="28" alt="Version 0.3.4">
   <a href="LICENSE">
-    <img src="https://img.shields.io/badge/LICENSE-MIT-F97316?style=flat-square" alt="MIT license">
+    <img src="https://img.shields.io/badge/LICENSE-MIT-F97316?style=flat-square" height="28" alt="MIT license">
   </a>
-  <img src="https://img.shields.io/badge/PRIVACY-LOCAL--FIRST-0284C7?style=flat-square" alt="Local-first">
+  <a href="README.zh-CN.md">
+    <img src="https://img.shields.io/badge/README-%E4%B8%AD%E6%96%87-0284C7?style=flat-square" height="28" alt="阅读简体中文">
+  </a>
 </p>
 
 A local-first dashboard and task workbench for Obsidian. It turns Markdown notes and frontmatter already in your vault into a focused home workspace: capture ideas, view task status, choose a focus task, and track time without sending your notes anywhere.
