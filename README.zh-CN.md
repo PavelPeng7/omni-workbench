@@ -1,7 +1,12 @@
 # Focus Workbench
 
 <p align="right">
-  <a href="README.md">English</a> | <strong>简体中文</strong>
+  <a href="README.md">
+    <img src="https://img.shields.io/badge/LANGUAGE-ENGLISH-5B5B5B?style=flat-square" alt="Read in English">
+  </a>
+  <a href="README.zh-CN.md">
+    <img src="https://img.shields.io/badge/%E8%AF%AD%E8%A8%80-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-7C3AED?style=flat-square" alt="阅读简体中文">
+  </a>
 </p>
 
 <p align="center">
