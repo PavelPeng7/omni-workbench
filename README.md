@@ -1,5 +1,22 @@
 # Focus Workbench
 
+<p align="right">
+  <strong>English</strong> | <a href="README.zh-CN.md">简体中文</a>
+</p>
+
+<p align="center">
+  <a href="https://obsidian.md/">
+    <img src="https://img.shields.io/badge/OBSIDIAN-PLUGIN-7C3AED?style=flat-square&amp;logo=obsidian&amp;logoColor=white" alt="Obsidian plugin">
+  </a>
+  <img src="https://img.shields.io/badge/VERSION-0.3.4-111111?style=flat-square" alt="Version 0.3.4">
+  <img src="https://img.shields.io/badge/OBSIDIAN-1.9.14%2B-7C3AED?style=flat-square" alt="Requires Obsidian 1.9.14 or newer">
+  <img src="https://img.shields.io/badge/NODE.JS-20%2B-339933?style=flat-square&amp;logo=nodedotjs&amp;logoColor=white" alt="Requires Node.js 20 or newer">
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/LICENSE-MIT-F97316?style=flat-square" alt="MIT license">
+  </a>
+  <img src="https://img.shields.io/badge/PRIVACY-LOCAL--FIRST-0284C7?style=flat-square" alt="Local-first">
+</p>
+
 A local-first dashboard and task workbench for Obsidian. It turns Markdown notes and frontmatter already in your vault into a focused home workspace: capture ideas, view task status, choose a focus task, and track time without sending your notes anywhere.
 
 ## What it does
