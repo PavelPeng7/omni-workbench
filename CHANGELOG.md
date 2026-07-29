@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.4
+
+### Added
+
+- The Today Tasks view now includes a persistent quick-create button above the task list, including when no tasks are scheduled for today.
+
+### Fixed
+
+- The Today Tasks quick action is rendered outside the refreshable results container so task-list updates no longer remove it.
+
 ## 0.3.3
 
 ### Fixed

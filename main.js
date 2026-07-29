@@ -511,7 +511,13 @@ class FocusWorkbenchView extends ItemView {
       const filterBar = controls.createDiv({ cls: "pvd-filter" }); Object.entries(filters).forEach(([key, label]) => this.button(filterBar, label, () => { this.taskFilter = key; void this.render(); }, this.taskFilter === key ? "is-active" : ""));
       const results = main.createDiv({ cls: "pvd-task-results" }); this.taskResultsEl = results; await this.renderTasksResults(results, filters, tasks, today, this.taskFilter, true); return;
     }
-    await this.renderTasksResults(main, filters, tasks, today, "today", false);
+    const todayActions = main.createEl("section", { cls: "pvd-today-actions" });
+    const todayActionCopy = todayActions.createDiv({ cls: "pvd-today-actions-copy" });
+    todayActionCopy.createEl("strong", { text: "今天要推进什么？" });
+    todayActionCopy.createSpan({ text: todayCount ? `当前有 ${todayCount} 项今日任务` : "创建一项任务，开始安排今天" });
+    this.button(todayActions, "＋ 新建任务", () => this.createTask(), "mod-cta");
+    const todayResults = main.createDiv({ cls: "pvd-task-results pvd-today-results" });
+    await this.renderTasksResults(todayResults, filters, tasks, today, "today", false);
   }
 
   matchesTaskSearch(file) {

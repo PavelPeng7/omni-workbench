@@ -175,3 +175,10 @@
 .theme-dark .pvd-stats-bar span{background:#8f7ce0}
 .theme-dark .pvd-task-main .pvd-visual-select:hover,.theme-dark .pvd-task-main .pvd-visual-select:focus{background:#35323f;color:#b9aee8;border-color:#4a4658}
 .pvd-chart-column.is-paused .pvd-chart-bar{background:#e3b23c}
+
+/* Today view: persistent quick-create action above the task list. */
+.pvd-today-actions{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 18px;border:1px solid rgba(255,255,255,.76);border-radius:21px;background:linear-gradient(135deg,rgba(255,255,255,.75),rgba(232,246,255,.62));box-shadow:8px 10px 22px rgba(89,145,190,.09),inset 0 1px 0 rgba(255,255,255,.88)}
+.pvd-today-actions-copy{display:grid;min-width:0;gap:5px}.pvd-today-actions-copy strong{color:#294f6b;font:900 14px/1.2 "Nunito","Microsoft YaHei",sans-serif}.pvd-today-actions-copy span{color:#7693a8;font:700 11px/1.35 "Nunito","Microsoft YaHei",sans-serif}
+.pvd-today-actions>button.mod-cta{flex:0 0 auto;min-height:40px;padding:0 16px;border:1px solid rgba(255,255,255,.7);border-radius:14px;background:linear-gradient(135deg,#76c3f4,#529fe0);box-shadow:0 7px 16px rgba(71,151,211,.2);color:#fff}.pvd-today-actions>button.mod-cta:hover{background:linear-gradient(135deg,#8bcdf7,#62aae5);box-shadow:0 9px 19px rgba(71,151,211,.24);transform:translateY(-1px)}
+.theme-dark .pvd-today-actions{border-color:#3a3746;background:linear-gradient(135deg,#2c2a37,#26242f);box-shadow:8px 10px 22px rgba(0,0,0,.2),inset 0 1px 0 rgba(255,255,255,.04)}.theme-dark .pvd-today-actions-copy strong{color:#e8e5f0}.theme-dark .pvd-today-actions-copy span{color:#a6a1b3}
+@media(max-width:520px){.pvd-today-actions{align-items:stretch;flex-direction:column;padding:15px}.pvd-today-actions>button.mod-cta{width:100%}}
