@@ -73,8 +73,8 @@ class TaskEditorModal extends Modal {
 class SetupModal extends Modal {
   constructor(app, plugin) { super(app); this.plugin = plugin; }
   onOpen() {
-    const { contentEl } = this; this.modalEl.addClass("pvd-modal-shell"); contentEl.addClass("pvd-modal"); contentEl.createEl("h2", { text: "初始化 Focus Workbench" });
-    contentEl.createEl("p", { text: "选择你的任务目录，并映射现有任务的字段名称。不会修改已有笔记。" });
+    const { contentEl } = this; this.modalEl.addClass("pvd-modal-shell"); contentEl.addClass("pvd-modal"); contentEl.createEl("h2", { text: "连接现有仓库" });
+    contentEl.createEl("p", { text: "仅在你已有自己的目录或 frontmatter 字段时使用。填写现有位置和字段名，不会移动或修改笔记。" });
     const form = contentEl.createDiv({ cls: "pvd-task-editor" }); const settings = this.plugin.settings; const schema = Object.assign({}, DEFAULT_SETTINGS.schema, settings.schema || {});
     const fields = [
       ["闪念笔记目录", "inboxFolder", settings.inboxFolder || ""], ["文献笔记目录", "literatureFolder", settings.literatureFolder || ""], ["永久笔记目录", "permanentFolder", settings.permanentFolder || ""],
@@ -84,14 +84,14 @@ class SetupModal extends Modal {
     ];
     const inputs = new Map(); fields.forEach(([label, key, value]) => { const row = form.createEl("label"); row.createSpan({ text: label }); const input = row.createEl("input", { type: "text", value, placeholder: key.includes("Folder") ? "相对 vault 的目录路径" : "frontmatter 字段名" }); inputs.set(key, input); });
     const actions = contentEl.createDiv({ cls: "pvd-modal-actions" }); const save = actions.createEl("button", { text: "保存配置", cls: "mod-cta" });
-    save.addEventListener("click", async () => { const taskFolder = inputs.get("taskFolder").value.trim().replace(/^\.\//, "").replace(/\/$/, ""); if (!taskFolder) { new Notice("请选择任务目录。"); return; } const nextSchema = Object.assign({}, schema); ["typeField", "typeValue", "statusField", "planField", "projectField", "priorityField"].forEach(key => nextSchema[key] = inputs.get(key).value.trim() || schema[key]); ["inboxFolder", "literatureFolder", "permanentFolder", "taskFolder", "projectFolder"].forEach(key => this.plugin.settings[key] = inputs.get(key).value.trim().replace(/^\.\//, "").replace(/\/$/, "")); this.plugin.settings.schema = nextSchema; await this.plugin.saveSettings(); this.close(); new Notice("Focus Workbench 配置已保存。"); });
+    save.addEventListener("click", async () => { const taskFolder = inputs.get("taskFolder").value.trim().replace(/^\.\//, "").replace(/\/$/, ""); if (!taskFolder) { new Notice("请选择任务目录。"); return; } const nextSchema = Object.assign({}, schema); ["typeField", "typeValue", "statusField", "planField", "projectField", "priorityField"].forEach(key => nextSchema[key] = inputs.get(key).value.trim() || schema[key]); ["inboxFolder", "literatureFolder", "permanentFolder", "taskFolder", "projectFolder"].forEach(key => this.plugin.settings[key] = inputs.get(key).value.trim().replace(/^\.\//, "").replace(/\/$/, "")); this.plugin.settings.schema = nextSchema; await this.plugin.saveSettings(); this.close(); new Notice("omni-workbench 配置已保存。"); });
   }
 }
 
 class FocusWorkbenchView extends ItemView {
   constructor(leaf, plugin) { super(leaf); this.plugin = plugin; this.tab = "home"; this.taskView = "today"; this.taskVisualMode = "calendar"; this.taskVisualProject = ""; this.taskVisualPriority = ""; this.taskVisualStatus = "all"; this.timelineDays = 14; this.taskFilter = "active"; this.completedExpanded = false; this.focusPath = ""; this.selectedTaskPath = ""; this.taskSearch = ""; this.knowledgeFilter = "all"; this.knowledgeSearch = ""; this.calendarMonth = this.monthStart(new Date()); }
   getViewType() { return VIEW_TYPE; }
-  getDisplayText() { return "Focus Workbench"; }
+  getDisplayText() { return "omni-workbench"; }
   getIcon() { return "layout-dashboard"; }
   async onOpen() {
     this.sourceTasks = [];
@@ -552,16 +552,19 @@ class FocusWorkbenchView extends ItemView {
     const card = parent.createDiv({ cls: `pvd-task ${this.taskDone(file) ? "is-done" : ""} ${selected ? "is-selected" : ""}`, attr: { role: "button", tabindex: "0", "aria-expanded": String(selected) } });
     card.addEventListener("click", () => this.selectTask(file));
     card.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); this.selectTask(file); } });
+    const stop = action => async event => { event.stopPropagation(); await action(); };
     const main = card.createDiv(); main.createEl("strong", { text: file.basename });
     const project = String(this.taskProperty(file, "projectField") || "未关联项目").replace(/^\[\[|\]\]$/g, "");
     main.createSpan({ text: `${project} · ${this.taskPlan(file) ? this.dateKey(this.taskPlan(file)) : "未安排日期"}` }); this.timer(main, file);
-    const badges = card.createDiv({ cls: "pvd-badges" }); badges.createSpan({ text: this.priority(file) }); badges.createSpan({ text: this.taskStatus(file) });
+    const side = card.createDiv({ cls: "pvd-task-card-side" });
+    const badges = side.createDiv({ cls: "pvd-badges" }); badges.createSpan({ text: this.priority(file) }); badges.createSpan({ text: this.taskStatus(file) });
+    const open = this.button(side, "打开文档 ↗", stop(() => this.openFile(file)), "pvd-task-open");
+    open.setAttribute("aria-label", `打开任务文档：${file.basename}`);
+    open.setAttribute("title", file.path);
     if (!selected) return;
     const actions = card.createDiv({ cls: "pvd-actions pvd-task-actions" });
-    const stop = action => async event => { event.stopPropagation(); await action(); };
     if (!this.taskDone(file)) { this.button(actions, this.timerState(file) === "进行中" ? "暂停专注" : "开始专注", stop(() => this.toggleTimer(file)), "mod-cta"); this.button(actions, "标记完成", stop(() => this.complete(file))); if (this.focusPath !== file.path) this.button(actions, "设为焦点", stop(() => this.setFocus(file))); }
     this.button(actions, "编辑详情", stop(() => this.editTask(file)));
-    this.button(actions, "打开笔记", stop(() => this.openFile(file)));
     this.button(actions, "删除", stop(() => this.deleteTask(file)), "pvd-danger");
   }
 
@@ -652,43 +655,119 @@ function unifiedTaskBase() {
   return `filters:\n  and:\n    - note.type == "任务"\nproperties:\n  file.name:\n    displayName: 任务名\n  所属项目:\n    displayName: 所属项目\n  任务状态:\n    displayName: 状态\n  任务优先级:\n    displayName: 优先级\n  计划日期:\n    displayName: 计划日期\n  预计耗时分钟:\n    displayName: 预计分钟\n  完成:\n    displayName: 完成\n  完成日期:\n    displayName: 完成日期\nviews:\n  - type: table\n    name: 全部任务\n    order:\n      - file.name\n      - 所属项目\n      - 任务状态\n      - 任务优先级\n      - 计划日期\n      - 预计耗时分钟\n      - 完成\n  - type: table\n    name: 今日\n    filters:\n      and:\n        - 计划日期 == today()\n        - 任务状态 != "完成"\n    order:\n      - file.name\n      - 所属项目\n      - 任务优先级\n  - type: table\n    name: 进行中\n    filters:\n      and:\n        - 任务状态 == "进行中"\n    order:\n      - file.name\n      - 所属项目\n      - 计划日期\n  - type: table\n    name: 已完成\n    filters:\n      and:\n        - 任务状态 == "完成"\n    order:\n      - file.name\n      - 所属项目\n      - 完成日期\n`;
 }
 
+function starterTaskTemplate(schema) {
+  return `---\n${schema.typeField}: ${schema.typeValue}\n${schema.projectField}: ""\n${schema.statusField}: 待做\n${schema.priorityField}: P2\n${schema.planField}: \n${schema.expectedField}: \n${schema.timerStateField}: 未开始\n${schema.timerStartedField}: \n${schema.elapsedField}: 0\n${schema.doneField}: false\n${schema.completedAtField}: \n创建日期: \n---\n\n# 新任务\n\n## 完成标准\n\n- [ ] \n`;
+}
+
+async function ensureVaultFolder(vault, folder) {
+  let current = "";
+  for (const part of folder.split("/").filter(Boolean)) {
+    current = current ? `${current}/${part}` : part;
+    if (!vault.getAbstractFileByPath(current)) await vault.createFolder(current);
+  }
+}
+
 class FocusWorkbenchSettingTab extends PluginSettingTab {
   constructor(app, plugin) { super(app, plugin); this.plugin = plugin; }
   display() {
-    const { containerEl } = this; containerEl.empty();
-    containerEl.createEl("h2", { text: "Focus Workbench · 初始化与任务数据" });
-    containerEl.createEl("p", { text: "任务范围由任务目录和字段映射决定。.base 文件仅作为可选的 Obsidian Bases 视图，插件不会解析或执行其中的筛选表达式。" });
-    new Setting(containerEl).setName("初始化向导").setDesc("为当前 vault 选择任务目录、项目目录和核心 frontmatter 字段。不会改动已有笔记。").addButton(button => button.setButtonText("打开向导").setCta().onClick(() => new SetupModal(this.app, this.plugin).open()));
-    new Setting(containerEl).setName("初始化卡片笔记仓库结构").setDesc("创建闪念笔记、文献笔记、永久笔记、任务、项目与每日进展目录；不会覆盖或移动已有文件。").addButton(button => button.setButtonText("创建目录").setCta().onClick(() => new ConfirmModal(this.app, "初始化目录结构", "将创建标准卡片笔记与任务目录。已有文件不会被修改，是否继续？", "创建", async () => {
-      const settings = this.plugin.settings; const goals = "目标与任务";
-      const defaults = { inboxFolder: "闪念笔记", literatureFolder: "文献笔记", permanentFolder: "永久笔记", taskFolder: `${goals}/任务管理/任务`, projectFolder: `${goals}/任务管理/项目` };
-      Object.entries(defaults).forEach(([key, value]) => { if (!settings[key]) settings[key] = value; });
-      const folders = [settings.inboxFolder, settings.literatureFolder, settings.permanentFolder, settings.taskFolder, settings.projectFolder, `${goals}/任务管理/每日进展`];
-      for (const folder of folders) { let current = ""; for (const part of folder.split("/").filter(Boolean)) { current = current ? `${current}/${part}` : part; if (!this.app.vault.getAbstractFileByPath(current)) await this.app.vault.createFolder(current); } }
-      await this.plugin.saveSettings(); this.display(); new Notice("标准卡片笔记仓库结构已创建。");
-    }).open()));
-    new Setting(containerEl).setName("任务目录").setDesc("只读取此目录及子目录内、符合任务类型字段和值的 Markdown 文件。").addText(text => text.setPlaceholder("Tasks").setValue(this.plugin.settings.taskFolder).onChange(async value => { this.plugin.settings.taskFolder = value.trim().replace(/^\.\//, "").replace(/\/$/, ""); await this.plugin.saveSettings(); }));
-    new Setting(containerEl).setName("项目目录").setDesc("编辑任务时用于生成所属项目下拉选项。").addText(text => text.setPlaceholder("Projects").setValue(this.plugin.settings.projectFolder).onChange(async value => { this.plugin.settings.projectFolder = value.trim().replace(/^\.\//, "").replace(/\/$/, ""); await this.plugin.saveSettings(); }));
-    new Setting(containerEl).setName("任务模板路径").setDesc("新建任务时优先使用该 Markdown 模板，自动填写计划日期与创建日期，并替换首个一级标题；文件不存在时使用内置格式。").addText(text => text.setPlaceholder("模板/任务模板.md").setValue(this.plugin.settings.taskTemplatePath).onChange(async value => { this.plugin.settings.taskTemplatePath = value.trim().replace(/^\.\//, ""); await this.plugin.saveSettings(); }));
-    new Setting(containerEl)
-      .setName("任务总表路径")
-      .setDesc("可填写已有 .base 文件，例如：目标与任务/任务总表.base")
-      .addText(text => text.setPlaceholder("目标与任务/任务总表.base").setValue(this.plugin.settings.taskBasePath).onChange(async value => {
-        this.plugin.settings.taskBasePath = value.trim().replace(/^\.\//, ""); await this.plugin.saveSettings();
-      }));
-    new Setting(containerEl)
-      .setName("创建统一任务总表")
-      .setDesc("可选：创建供 Obsidian Bases 打开的任务视图。它不会影响插件自身的任务范围。不会覆盖已有文件。")
-      .addButton(button => button.setButtonText("一键新建").setCta().onClick(async () => {
-        const path = this.plugin.settings.taskBasePath;
-        if (!path.endsWith(".base")) { new Notice("任务总表路径必须以 .base 结尾。"); return; }
-        if (this.app.vault.getAbstractFileByPath(path)) { new Notice("该任务总表已存在，不会覆盖。"); return; }
-        const parts = path.split("/"); parts.pop(); let current = "";
-        for (const part of parts.filter(Boolean)) { current = current ? `${current}/${part}` : part; if (!this.app.vault.getAbstractFileByPath(current)) await this.app.vault.createFolder(current); }
-        await this.app.vault.create(path, unifiedTaskBase()); new Notice("任务总表已创建。");
-      }));
-    const current = this.app.vault.getAbstractFileByPath(this.plugin.settings.taskBasePath);
-    containerEl.createEl("p", { cls: current ? "pvd-setting-ok" : "pvd-setting-warning", text: current ? `当前数据表：${this.plugin.settings.taskBasePath}` : "当前路径没有找到任务总表。可指定已有 .base 文件，或点击“一键新建”。" });
+    const { containerEl } = this;
+    containerEl.empty();
+    containerEl.addClass("pvd-settings-guide");
+
+    const settings = this.plugin.settings;
+    const defaults = {
+      inboxFolder: "闪念笔记",
+      literatureFolder: "文献笔记",
+      permanentFolder: "永久笔记",
+      taskFolder: "目标与任务/任务管理/任务",
+      projectFolder: "目标与任务/任务管理/项目",
+      taskTemplatePath: "模板/任务模板.md",
+      taskBasePath: "目标与任务/任务总表.base"
+    };
+    const value = key => settings[key] || defaults[key];
+    const entry = path => path ? this.app.vault.getAbstractFileByPath(path) : null;
+    const folderExists = path => Boolean(entry(path)?.children);
+    const fileExists = path => Boolean(entry(path) && !entry(path).children);
+    const folderReady = ["inboxFolder", "literatureFolder", "permanentFolder", "taskFolder", "projectFolder"].every(key => folderExists(value(key))) && folderExists("目标与任务/任务管理/每日进展");
+    const templateReady = fileExists(value("taskTemplatePath"));
+    const baseReady = fileExists(value("taskBasePath"));
+    const readyCount = [folderReady, templateReady, baseReady].filter(Boolean).length;
+
+    const hero = containerEl.createDiv({ cls: "pvd-onboarding-hero" });
+    const heroCopy = hero.createDiv({ cls: "pvd-onboarding-hero-copy" });
+    heroCopy.createEl("p", { cls: "pvd-onboarding-kicker", text: "首次使用 · 约 1 分钟" });
+    heroCopy.createEl("strong", { cls: "pvd-onboarding-title", text: "先搭好工作区，再开始记录" });
+    heroCopy.createEl("p", { text: "推荐初始化会创建任务系统、任务模板、任务总表和三类知识文件夹。已有文件只会保留，不会覆盖或移动。" });
+    const progress = hero.createDiv({ cls: "pvd-onboarding-progress", attr: { role: "status", "aria-label": `初始化进度：完成 ${readyCount}/3` } });
+    progress.createEl("strong", { text: `${readyCount}/3` });
+    progress.createSpan({ text: readyCount === 3 ? "准备完成" : "项已就绪" });
+
+    new Setting(hero)
+      .setName(readyCount === 3 ? "推荐结构已准备好" : "自动创建推荐结构")
+      .setDesc("包括 3 个知识目录、任务、项目与每日进展目录，以及任务模板和 Obsidian Bases 任务总表；可以重复执行，已有内容不会被改写。")
+      .addButton(button => button.setButtonText(readyCount === 3 ? "检查并补齐" : "一键初始化").setCta().onClick(() => new ConfirmModal(this.app, "初始化推荐工作区", "将补齐三类知识文件夹、任务与项目目录、任务模板和任务总表。已有文件不会被覆盖，是否继续？", "开始初始化", async () => {
+        Object.entries(defaults).forEach(([key, path]) => { if (!settings[key]) settings[key] = path; });
+        if (!settings.taskTemplatePath.endsWith(".md")) { new Notice("任务模板路径必须以 .md 结尾。"); return; }
+        if (!settings.taskBasePath.endsWith(".base")) { new Notice("任务总表路径必须以 .base 结尾。"); return; }
+        const folders = [settings.inboxFolder, settings.literatureFolder, settings.permanentFolder, settings.taskFolder, settings.projectFolder, "目标与任务/任务管理/每日进展"];
+        for (const folder of folders) await ensureVaultFolder(this.app.vault, folder);
+        const templatePath = settings.taskTemplatePath;
+        await ensureVaultFolder(this.app.vault, templatePath.split("/").slice(0, -1).join("/"));
+        if (this.app.vault.getAbstractFileByPath(templatePath)?.children) { new Notice("任务模板路径当前是一个文件夹，请换一个 .md 文件路径。"); return; }
+        if (!this.app.vault.getAbstractFileByPath(templatePath)) await this.app.vault.create(templatePath, starterTaskTemplate(Object.assign({}, DEFAULT_SETTINGS.schema, settings.schema || {})));
+        const basePath = settings.taskBasePath;
+        await ensureVaultFolder(this.app.vault, basePath.split("/").slice(0, -1).join("/"));
+        if (this.app.vault.getAbstractFileByPath(basePath)?.children) { new Notice("任务总表路径当前是一个文件夹，请换一个 .base 文件路径。"); return; }
+        if (!this.app.vault.getAbstractFileByPath(basePath)) await this.app.vault.create(basePath, unifiedTaskBase());
+        await this.plugin.saveSettings();
+        this.display();
+        new Notice("推荐工作区已准备好，可以打开 omni-workbench 开始使用。");
+      }).open()));
+
+    const map = containerEl.createDiv({ cls: "pvd-onboarding-map", attr: { "aria-label": "三步上手流程" } });
+    [
+      ["1", "收集", "想法先进入闪念笔记"],
+      ["2", "整理", "阅读输入放入文献笔记"],
+      ["3", "沉淀", "自己的结论写成永久笔记"]
+    ].forEach(([number, title, description]) => {
+      const item = map.createDiv({ cls: "pvd-onboarding-map-item" });
+      item.createEl("b", { text: number });
+      const copy = item.createDiv(); copy.createEl("strong", { text: title }); copy.createSpan({ text: description });
+    });
+
+    new Setting(containerEl).setName("第 1 步：理解三个知识文件夹").setDesc("它们代表内容从随手记录到可复用知识的三个阶段，而不是三个主题分类。").setHeading();
+    const knowledgeGrid = containerEl.createDiv({ cls: "pvd-knowledge-folder-guide" });
+    [
+      ["inboxFolder", "闪念笔记", "先记下来", "临时想法、灵感、待整理的问题。允许不完整，重点是不丢失。", "例如：尝试把周报改成项目复盘"],
+      ["literatureFolder", "文献笔记", "保留来源", "书籍、文章、播客和会议中的摘录与理解，应该能回到原始来源。", "例如：《深度工作》第 2 章摘录"],
+      ["permanentFolder", "永久笔记", "形成自己的观点", "用自己的话写成一条独立结论，脱离原文也能理解、链接和复用。", "例如：减少切换成本比延长工时更有效"]
+    ].forEach(([key, name, stage, description, example]) => {
+      const card = knowledgeGrid.createDiv({ cls: `pvd-knowledge-folder-card is-${key}` });
+      const head = card.createDiv({ cls: "pvd-knowledge-folder-head" });
+      head.createEl("strong", { text: name }); head.createSpan({ text: stage });
+      card.createEl("p", { text: description });
+      card.createEl("small", { text: example });
+      new Setting(card).setName("保存位置").setDesc(folderExists(value(key)) ? "目录已存在" : "初始化时会自动创建").addText(text => text.setValue(value(key)).setPlaceholder(defaults[key]).onChange(async next => { settings[key] = next.trim().replace(/^\.\//, "").replace(/\/$/, ""); await this.plugin.saveSettings(); }));
+    });
+
+    new Setting(containerEl).setName("第 2 步：确认任务如何保存").setDesc("任务目录是插件读取任务的来源；项目目录用于任务编辑器的项目选项。").setHeading();
+    const taskSection = containerEl.createDiv({ cls: "pvd-settings-section" });
+    new Setting(taskSection).setName("任务目录").setDesc("新建任务保存在这里，插件也只从这里读取符合字段规则的任务。").addText(text => text.setValue(value("taskFolder")).setPlaceholder(defaults.taskFolder).onChange(async next => { settings.taskFolder = next.trim().replace(/^\.\//, "").replace(/\/$/, ""); await this.plugin.saveSettings(); }));
+    new Setting(taskSection).setName("项目目录").setDesc("此目录中的笔记会出现在任务的“所属项目”下拉菜单中。").addText(text => text.setValue(value("projectFolder")).setPlaceholder(defaults.projectFolder).onChange(async next => { settings.projectFolder = next.trim().replace(/^\.\//, "").replace(/\/$/, ""); await this.plugin.saveSettings(); }));
+
+    new Setting(containerEl).setName("第 3 步：理解模板和任务总表").setDesc("模板决定新任务笔记的内容；任务总表只是额外的表格视图，两者用途不同。").setHeading();
+    const assets = containerEl.createDiv({ cls: "pvd-settings-assets" });
+    const templateCard = assets.createDiv({ cls: "pvd-settings-asset-card" });
+    templateCard.createEl("strong", { text: "任务模板 · 决定新任务长什么样" });
+    templateCard.createEl("p", { text: "每次在工作台点击“新建任务”时使用。插件会自动写入计划日期、创建日期和任务标题。模板不存在时仍可使用内置格式。" });
+    new Setting(templateCard).setName(templateReady ? "模板已找到" : "等待初始化").setDesc(value("taskTemplatePath")).addText(text => text.setValue(value("taskTemplatePath")).setPlaceholder(defaults.taskTemplatePath).onChange(async next => { settings.taskTemplatePath = next.trim().replace(/^\.\//, ""); await this.plugin.saveSettings(); }));
+    const baseCard = assets.createDiv({ cls: "pvd-settings-asset-card" });
+    baseCard.createEl("strong", { text: "任务总表 · 用表格浏览同一批任务" });
+    baseCard.createEl("p", { text: "这是可选的 Obsidian Bases 视图，提供“全部、今日、进行中、已完成”表格。它不会决定插件读取哪些任务。" });
+    new Setting(baseCard).setName(baseReady ? "任务总表已找到" : "等待初始化").setDesc(value("taskBasePath")).addText(text => text.setValue(value("taskBasePath")).setPlaceholder(defaults.taskBasePath).onChange(async next => { settings.taskBasePath = next.trim().replace(/^\.\//, ""); await this.plugin.saveSettings(); }));
+
+    new Setting(containerEl).setName("已有仓库或自定义字段").setDesc("如果你已经有自己的目录和 frontmatter 字段，再使用高级映射；全新用户可以跳过。").setHeading();
+    new Setting(containerEl).setName("连接现有仓库").setDesc("映射已有任务、项目、三类知识目录与字段名称。不会移动或修改任何已有笔记。").addButton(button => button.setButtonText("打开高级映射").onClick(() => new SetupModal(this.app, this.plugin).open()));
   }
 }
 
@@ -704,7 +783,7 @@ const VISUAL_RUNTIME_CSS = `
 .pvd-visual-v5 .pvd-stat-icon{background:#eee9ff!important;color:#6d51ca!important}.pvd-visual-v5 .is-doing .pvd-stat-icon{background:#e3f2ff!important;color:#418bc8!important}.pvd-visual-v5 .is-done .pvd-stat-icon{background:#e5f7ef!important;color:#3d9a73!important}.pvd-visual-v5 .is-overdue .pvd-stat-icon{background:#ffe8ee!important;color:#bf5870!important}
 .pvd-visual-v5 .pvd-stats-chart,.pvd-visual-v5 .pvd-stats-panel{border:1px solid #eceaf0!important;border-radius:11px!important;background:#fff!important;box-shadow:0 6px 18px rgba(56,48,91,.04)!important}.pvd-visual-v5 .pvd-stats-chart{display:grid!important;gap:12px!important;padding:16px 18px 14px!important}.pvd-visual-v5 .pvd-stats-chart-head{display:flex!important;align-items:flex-start!important;justify-content:space-between!important;gap:16px!important}.pvd-visual-v5 .pvd-stats-chart-head h3,.pvd-visual-v5 .pvd-stats-panel h3{margin:0!important;color:#44414b!important;font:650 14px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-stats-chart-head p{margin:5px 0 0!important;color:#99969f!important;font:500 10px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-stats-chart-head>span{padding:5px 7px!important;border-radius:5px!important;background:#f0edf8!important;color:#71658c!important;font:600 9px/1 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-chart-plot{position:relative!important;height:210px!important;border-bottom:1px solid #dedbe3!important}.pvd-visual-v5 .pvd-chart-grid{position:absolute!important;inset:0!important}.pvd-visual-v5 .pvd-chart-grid span{position:absolute!important;right:0!important;left:0!important;bottom:var(--pvd-grid)!important;height:1px!important;border-top:1px dashed #eceaf0!important}.pvd-visual-v5 .pvd-chart-bars{position:absolute!important;inset:0 4%!important;display:grid!important;grid-template-columns:repeat(4,minmax(50px,1fr))!important;align-items:end!important;gap:7%!important}.pvd-visual-v5 .pvd-chart-column{display:grid!important;grid-template-rows:18px minmax(0,1fr) 24px!important;align-items:end!important;height:100%!important;justify-items:center!important;color:#85818b!important}.pvd-visual-v5 .pvd-chart-column>b,.pvd-visual-v5 .pvd-chart-column>span{color:#6d6974!important;font:600 10px/1 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-chart-bar{align-self:end!important;width:min(34px,48%)!important;height:var(--pvd-bar-height)!important;min-height:2px!important;border-radius:5px 5px 2px 2px!important;background:#8167df!important;box-shadow:none!important}.pvd-visual-v5 .pvd-chart-column.is-doing .pvd-chart-bar{background:#58a6df!important}.pvd-visual-v5 .pvd-chart-column.is-done .pvd-chart-bar{background:#4caf83!important}.pvd-visual-v5 .pvd-chart-column.is-overdue .pvd-chart-bar{background:#df6b82!important}.pvd-visual-v5 .pvd-stats-analysis{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}.pvd-visual-v5 .pvd-stats-panel{display:grid!important;gap:11px!important;padding:14px 15px!important}.pvd-visual-v5 .pvd-stats-row{display:grid!important;grid-template-columns:minmax(72px,1fr) minmax(80px,2fr) auto!important;align-items:center!important;gap:10px!important;color:#85818b!important;font:500 10px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-stats-bar{height:5px!important;overflow:hidden!important;border-radius:999px!important;background:#f0eef3!important}.pvd-visual-v5 .pvd-stats-bar span{display:block!important;height:100%!important;border-radius:inherit!important;background:#8167df!important}
 @media(max-width:900px){.pvd-visual-workspace-v5{grid-template-columns:1fr!important}.pvd-visual-v5 .pvd-stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
-/* v7 theme: Focus Workbench surfaces with Notion-inspired data structures. */
+/* v7 theme: omni-workbench surfaces with Notion-inspired data structures. */
 .pvd-visual-v7{--v7-purple:#7857df;--v7-blue:#52a5e3;--v7-ink:#2e3040;--v7-muted:#7189a0;--v7-line:rgba(99,126,158,.13)}
 .pvd-visual-v7 .pvd-visual-controls{padding:8px 10px!important;border:1px solid rgba(255,255,255,.88)!important;border-radius:18px!important;background:rgba(255,255,255,.61)!important;box-shadow:0 12px 30px rgba(74,77,122,.08),inset 0 1px 0 #fff!important;backdrop-filter:blur(16px)!important}.pvd-visual-v7 .pvd-visual-tabs .pvd-visual-mode{min-height:38px!important;border-radius:12px!important;color:#66839d!important;font:800 12px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-visual-tabs .pvd-visual-mode.is-active{background:linear-gradient(135deg,#eee9ff,#e3ddff)!important;box-shadow:0 5px 14px rgba(112,80,207,.13)!important;color:#674bc4!important}.pvd-visual-v7 .pvd-visual-select{min-height:36px!important;border:1px solid rgba(105,126,158,.14)!important;border-radius:11px!important;background:rgba(255,255,255,.78)!important;color:#668099!important;font:800 11px "Nunito","Microsoft YaHei",sans-serif!important}
 .pvd-visual-v7 .pvd-timeline,.pvd-visual-v7 .pvd-task-stats-view{gap:18px!important;padding:26px!important;border:1px solid rgba(255,255,255,.90)!important;border-radius:30px!important;background:linear-gradient(145deg,rgba(255,255,255,.91),rgba(239,247,255,.76))!important;box-shadow:0 22px 52px rgba(77,78,124,.11),inset 0 1px 0 #fff!important}
@@ -772,8 +851,8 @@ module.exports = class FocusWorkbenchPlugin extends Plugin {
     const visualStyle = document.createElement("style"); visualStyle.id = VISUAL_RUNTIME_STYLE_ID; visualStyle.textContent = VISUAL_RUNTIME_CSS; document.head.appendChild(visualStyle); this.register(() => visualStyle.remove());
     this.registerView(VIEW_TYPE, leaf => new FocusWorkbenchView(leaf, this));
     this.addSettingTab(new FocusWorkbenchSettingTab(this.app, this));
-    this.addRibbonIcon("layout-dashboard", "打开 Focus Workbench", () => this.activateView());
-    this.addCommand({ id: "open-focus-workbench", name: "Open Focus Workbench", callback: () => this.activateView() });
+    this.addRibbonIcon("layout-dashboard", "打开 omni-workbench", () => this.activateView());
+    this.addCommand({ id: "open-focus-workbench", name: "Open omni-workbench", callback: () => this.activateView() });
   }
   async loadSettings() { const saved = await this.loadData() || {}; this.settings = Object.assign({}, DEFAULT_SETTINGS, saved, { schema: Object.assign({}, DEFAULT_SETTINGS.schema, saved.schema || {}) }); }
   async saveSettings() { await this.saveData(this.settings); }

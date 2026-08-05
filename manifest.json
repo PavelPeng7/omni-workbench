@@ -1,6 +1,6 @@
 {
   "id": "pavel-dashboard",
-  "name": "Focus Workbench",
+  "name": "omni-workbench",
   "version": "0.3.4",
   "minAppVersion": "1.9.14",
   "description": "A local-first dashboard for tasks, focus, and knowledge notes.",
