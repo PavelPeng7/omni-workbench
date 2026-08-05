@@ -1,7 +1,7 @@
 {
   "id": "pavel-dashboard",
   "name": "omni-workbench",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "minAppVersion": "1.9.14",
   "description": "A local-first dashboard for tasks, focus, and knowledge notes.",
   "author": "Pavel Peng",
