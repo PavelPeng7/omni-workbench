@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.8
+
+### Changed
+
+- Standardized the user-facing plugin name as **Omni Workbench** across the Obsidian manifest, workspace title, commands, notices, and documentation.
+- Kept the stable `pavel-dashboard` plugin ID so existing installations and settings continue to work.
+
 ## 0.3.7
 
 ### Added

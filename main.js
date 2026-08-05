@@ -115,14 +115,14 @@ class SetupModal extends Modal {
     ];
     const inputs = new Map(); fields.forEach(([label, key, value]) => { const row = form.createEl("label"); row.createSpan({ text: label }); const input = row.createEl("input", { type: "text", value, placeholder: key.includes("Folder") ? "相对 vault 的目录路径" : "frontmatter 字段名" }); inputs.set(key, input); });
     const actions = contentEl.createDiv({ cls: "pvd-modal-actions" }); const save = actions.createEl("button", { text: "保存配置", cls: "mod-cta" });
-    save.addEventListener("click", async () => { const taskFolder = inputs.get("taskFolder").value.trim().replace(/^\.\//, "").replace(/\/$/, ""); if (!taskFolder) { new Notice("请选择任务目录。"); return; } const nextSchema = Object.assign({}, schema); ["typeField", "typeValue", "statusField", "planField", "projectField", "priorityField"].forEach(key => nextSchema[key] = inputs.get(key).value.trim() || schema[key]); ["inboxFolder", "literatureFolder", "permanentFolder", "taskFolder", "projectFolder"].forEach(key => this.plugin.settings[key] = inputs.get(key).value.trim().replace(/^\.\//, "").replace(/\/$/, "")); this.plugin.settings.schema = nextSchema; await this.plugin.saveSettings(); this.close(); new Notice("omni-workbench 配置已保存。"); });
+    save.addEventListener("click", async () => { const taskFolder = inputs.get("taskFolder").value.trim().replace(/^\.\//, "").replace(/\/$/, ""); if (!taskFolder) { new Notice("请选择任务目录。"); return; } const nextSchema = Object.assign({}, schema); ["typeField", "typeValue", "statusField", "planField", "projectField", "priorityField"].forEach(key => nextSchema[key] = inputs.get(key).value.trim() || schema[key]); ["inboxFolder", "literatureFolder", "permanentFolder", "taskFolder", "projectFolder"].forEach(key => this.plugin.settings[key] = inputs.get(key).value.trim().replace(/^\.\//, "").replace(/\/$/, "")); this.plugin.settings.schema = nextSchema; await this.plugin.saveSettings(); this.close(); new Notice("Omni Workbench 配置已保存。"); });
   }
 }
 
 class FocusWorkbenchView extends ItemView {
   constructor(leaf, plugin) { super(leaf); this.plugin = plugin; this.tab = "home"; this.taskView = "today"; this.taskVisualMode = "calendar"; this.taskVisualProject = ""; this.taskVisualPriority = ""; this.taskVisualStatus = "all"; this.timelineDays = 14; this.taskFilter = "active"; this.completedExpanded = false; this.focusPath = ""; this.taskSearch = ""; this.knowledgeFilter = "all"; this.knowledgeSearch = ""; this.calendarMonth = this.monthStart(new Date()); }
   getViewType() { return VIEW_TYPE; }
-  getDisplayText() { return "omni-workbench"; }
+  getDisplayText() { return "Omni Workbench"; }
   getIcon() { return "layout-dashboard"; }
   async onOpen() {
     this.sourceTasks = [];
@@ -917,7 +917,7 @@ class FocusWorkbenchSettingTab extends PluginSettingTab {
         if (!this.app.vault.getAbstractFileByPath(basePath)) await this.app.vault.create(basePath, unifiedTaskBase());
         await this.plugin.saveSettings();
         this.display();
-        new Notice("推荐工作区已准备好，可以打开 omni-workbench 开始使用。");
+        new Notice("推荐工作区已准备好，可以打开 Omni Workbench 开始使用。");
       }).open()));
 
     const map = containerEl.createDiv({ cls: "pvd-onboarding-map", attr: { "aria-label": "三步上手流程" } });
@@ -1047,8 +1047,8 @@ module.exports = class FocusWorkbenchPlugin extends Plugin {
     const visualStyle = document.createElement("style"); visualStyle.id = VISUAL_RUNTIME_STYLE_ID; visualStyle.textContent = VISUAL_RUNTIME_CSS; document.head.appendChild(visualStyle); this.register(() => visualStyle.remove());
     this.registerView(VIEW_TYPE, leaf => new FocusWorkbenchView(leaf, this));
     this.addSettingTab(new FocusWorkbenchSettingTab(this.app, this));
-    this.addRibbonIcon("layout-dashboard", "打开 omni-workbench", () => this.activateView());
-    this.addCommand({ id: "open-focus-workbench", name: "Open omni-workbench", callback: () => this.activateView() });
+    this.addRibbonIcon("layout-dashboard", "打开 Omni Workbench", () => this.activateView());
+    this.addCommand({ id: "open-focus-workbench", name: "Open Omni Workbench", callback: () => this.activateView() });
   }
   async loadSettings() { const saved = await this.loadData() || {}; this.settings = Object.assign({}, DEFAULT_SETTINGS, saved, { schema: Object.assign({}, DEFAULT_SETTINGS.schema, saved.schema || {}) }); }
   async saveSettings() { await this.saveData(this.settings); }

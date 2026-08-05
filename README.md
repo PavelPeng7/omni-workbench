@@ -1,4 +1,4 @@
-# omni-workbench
+# Omni Workbench
 
 <p align="center">
   <a href="https://obsidian.md/">
@@ -25,17 +25,17 @@ A local-first dashboard and task workbench for Obsidian. It turns Markdown notes
 
 ## Privacy
 
-omni-workbench is local-first. It does not make network requests, collect telemetry, or upload vault content. It reads only the task, inbox, permanent-note, and literature-note folders configured in its settings, plus the optional task template and `.base` file. All task and timer data stays in Markdown frontmatter inside your vault.
+Omni Workbench is local-first. It does not make network requests, collect telemetry, or upload vault content. It reads only the task, inbox, permanent-note, and literature-note folders configured in its settings, plus the optional task template and `.base` file. All task and timer data stays in Markdown frontmatter inside your vault.
 
 ## Install from the community directory
 
-After the plugin is approved, open **Settings → Community plugins**, search for **omni-workbench**, install it, and enable it. Run **Open omni-workbench** from the Command Palette.
+After the plugin is approved, open **Settings → Community plugins**, search for **Omni Workbench**, install it, and enable it. Run **Open Omni Workbench** from the Command Palette.
 
-For a new vault, open **Settings → omni-workbench** and choose **One-click initialization**. It safely creates the recommended knowledge folders, task and project folders, a starter task template, and an optional Obsidian Bases task table. Existing files are never overwritten.
+For a new vault, open **Settings → Omni Workbench** and choose **One-click initialization**. It safely creates the recommended knowledge folders, task and project folders, a starter task template, and an optional Obsidian Bases task table. Existing files are never overwritten.
 
 ## Data format
 
-The plugin works with Markdown files that use frontmatter. Its default task conventions use Chinese field names, and every field name can be remapped in the setup wizard or **Settings → omni-workbench**:
+The plugin works with Markdown files that use frontmatter. Its default task conventions use Chinese field names, and every field name can be remapped in the setup wizard or **Settings → Omni Workbench**:
 
 ```yaml
 ---
@@ -54,7 +54,7 @@ type: 任务
 
 The focus timer counts up: elapsed seconds accumulate in `累计耗时秒` while `计时状态` is `进行中`. With the optional `预计耗时分钟` estimate set, the timer pill shows remaining time and keeps counting into overtime (with a one-time notice) instead of stopping; a session left running for more than 12 hours is auto-paused when the workbench opens. New tasks are created from the Markdown template configured in settings (default `模板/任务模板.md`), falling back to the minimal built-in format above when the file does not exist.
 
-Ideas use `type: 闪念笔记`. The default task location is `目标与任务/任务管理/任务`, and the default Base file is `目标与任务/任务总表.base`. Folders, field names, the task template, and the Base path can all be adapted to your vault from **Settings → omni-workbench**. The `.base` file is an optional companion view; the plugin does not interpret its filter expressions.
+Ideas use `type: 闪念笔记`. The default task location is `目标与任务/任务管理/任务`, and the default Base file is `目标与任务/任务总表.base`. Folders, field names, the task template, and the Base path can all be adapted to your vault from **Settings → Omni Workbench**. The `.base` file is an optional companion view; the plugin does not interpret its filter expressions.
 
 ## Development
 
