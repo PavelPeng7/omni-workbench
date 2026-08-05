@@ -49,10 +49,11 @@ class ConfirmModal extends Modal {
 }
 
 class TaskEditorModal extends Modal {
-  constructor(app, file, data, projects, submit) { super(app); this.file = file; this.data = data; this.projects = projects; this.submit = submit; }
+  constructor(app, file, data, projects, submit, workflow = []) { super(app); this.file = file; this.data = data; this.projects = projects; this.submit = submit; this.workflow = workflow; }
   onOpen() {
     const { contentEl } = this; this.modalEl.addClass("pvd-modal-shell"); contentEl.addClass("pvd-modal"); const data = this.data;
     contentEl.createEl("h2", { text: `编辑任务：${this.file.basename}` });
+    contentEl.createEl("p", { cls: "pvd-modal-lead", text: "修改任务属性，或直接执行常用工作流。卡片本身保持简洁，不再展开操作面板。" });
     const form = contentEl.createDiv({ cls: "pvd-task-editor" });
     const field = (label, element) => { const row = form.createEl("label"); row.createSpan({ text: label }); row.appendChild(element); return element; };
     const project = field("所属项目", document.createElement("select"));
@@ -64,9 +65,39 @@ class TaskEditorModal extends Modal {
     const status = field("任务状态", document.createElement("select")); ["待做", "进行中", "暂停", "完成"].forEach(value => status.createEl("option", { text: value, value })); status.value = data.status || "待做";
     const date = field("计划日期", document.createElement("input")); date.type = "date"; date.value = data.plan || "";
     const estimate = field("预计耗时（分钟）", document.createElement("input")); estimate.type = "number"; estimate.min = "0"; estimate.step = "1"; estimate.value = data.estimate || "";
+    if (this.workflow.length) {
+      const section = contentEl.createDiv({ cls: "pvd-modal-workflow" }); section.createEl("strong", { text: "快捷操作" });
+      const workflowActions = section.createDiv({ cls: "pvd-modal-workflow-actions" });
+      this.workflow.forEach(item => { const button = workflowActions.createEl("button", { text: item.label, cls: item.cls || "" }); button.addEventListener("click", async () => { this.close(); await item.run(); }); });
+    }
     const actions = contentEl.createDiv({ cls: "pvd-modal-actions" });
     const save = actions.createEl("button", { text: "保存", cls: "mod-cta" });
     save.addEventListener("click", async () => { const minutes = estimate.value.trim(); if (minutes && (!/^\d+$/.test(minutes) || Number(minutes) < 0)) { new Notice("预计耗时请输入大于等于 0 的整数分钟数。"); return; } await this.submit({ project: project.value.trim(), priority: priority.value, status: status.value, plan: date.value, estimate: minutes }); this.close(); });
+  }
+}
+
+class IdeaEditorModal extends Modal {
+  constructor(app, view, file) { super(app); this.view = view; this.file = file; }
+  onOpen() {
+    const { contentEl } = this; const view = this.view; const file = this.file; const linkedTask = view.ideaLinkedTask(file);
+    this.modalEl.addClass("pvd-modal-shell"); contentEl.addClass("pvd-modal"); contentEl.addClass("pvd-idea-editor-modal");
+    contentEl.createEl("h2", { text: `编辑闪念：${view.ideaTitle(file)}` });
+    contentEl.createEl("p", { cls: "pvd-modal-lead", text: `${view.ideaTimeLabel(file)}${linkedTask ? ` · 来源任务：${linkedTask.basename}` : " · 暂无关联任务"}` });
+    const form = contentEl.createDiv({ cls: "pvd-task-editor" });
+    const titleRow = form.createEl("label"); titleRow.createSpan({ text: "闪念标题" }); const title = titleRow.createEl("input", { type: "text", value: view.ideaTitle(file) });
+    const tagsRow = form.createEl("label"); tagsRow.createSpan({ text: "标签（用逗号或空格分隔）" }); const tags = tagsRow.createEl("input", { type: "text", value: view.ideaTags(file).join(", "), placeholder: "例如：写作, Unity, 设计" });
+    const section = contentEl.createDiv({ cls: "pvd-modal-workflow" }); section.createEl("strong", { text: "卡片笔记分流" }); section.createEl("p", { text: "完善后沉淀为永久笔记，保留外部来源时归档为文献笔记；形成明确行动则转任务，无价值则舍弃。" });
+    const workflow = section.createDiv({ cls: "pvd-modal-workflow-actions" });
+    const action = (label, run, cls = "") => { const button = workflow.createEl("button", { text: label, cls }); button.addEventListener("click", async () => { this.close(); await run(); }); };
+    action("打开正文", () => view.openFile(file), "mod-cta");
+    action("沉淀永久", () => view.convertIdeaToNote(file, "permanent"));
+    action("归档文献", () => view.convertIdeaToNote(file, "literature"));
+    if (linkedTask) action("打开来源任务", () => view.openFile(linkedTask)); else action("转为任务", () => view.convertIdeaToTask(file));
+    action("舍弃", () => view.discardIdea(file), "pvd-danger");
+    const actions = contentEl.createDiv({ cls: "pvd-modal-actions" }); const cancel = actions.createEl("button", { text: "取消" }); const save = actions.createEl("button", { text: "保存修改", cls: "mod-cta" });
+    cancel.addEventListener("click", () => this.close());
+    save.addEventListener("click", async () => { const nextTitle = title.value.trim(); const error = view.validateNoteTitle(nextTitle); if (error) { new Notice(error); return; } await view.updateIdea(file, { title: nextTitle, tags: tags.value }); this.close(); });
+    window.setTimeout(() => title.focus(), 0);
   }
 }
 
@@ -89,7 +120,7 @@ class SetupModal extends Modal {
 }
 
 class FocusWorkbenchView extends ItemView {
-  constructor(leaf, plugin) { super(leaf); this.plugin = plugin; this.tab = "home"; this.taskView = "today"; this.taskVisualMode = "calendar"; this.taskVisualProject = ""; this.taskVisualPriority = ""; this.taskVisualStatus = "all"; this.timelineDays = 14; this.taskFilter = "active"; this.completedExpanded = false; this.focusPath = ""; this.selectedTaskPath = ""; this.taskSearch = ""; this.knowledgeFilter = "all"; this.knowledgeSearch = ""; this.calendarMonth = this.monthStart(new Date()); }
+  constructor(leaf, plugin) { super(leaf); this.plugin = plugin; this.tab = "home"; this.taskView = "today"; this.taskVisualMode = "calendar"; this.taskVisualProject = ""; this.taskVisualPriority = ""; this.taskVisualStatus = "all"; this.timelineDays = 14; this.taskFilter = "active"; this.completedExpanded = false; this.focusPath = ""; this.taskSearch = ""; this.knowledgeFilter = "all"; this.knowledgeSearch = ""; this.calendarMonth = this.monthStart(new Date()); }
   getViewType() { return VIEW_TYPE; }
   getDisplayText() { return "omni-workbench"; }
   getIcon() { return "layout-dashboard"; }
@@ -203,10 +234,9 @@ class FocusWorkbenchView extends ItemView {
     this.sourceMode = "schema";
   }
   compareTasks(a, b) { const rank = { P0: 0, P1: 1, P2: 2 }; return rank[this.priority(a)] - rank[this.priority(b)] || (this.taskPlan(a)?.getTime() || Infinity) - (this.taskPlan(b)?.getTime() || Infinity) || a.basename.localeCompare(b.basename, "zh-CN"); }
-  focusTask(tasks) { const active = tasks.filter(file => !this.taskDone(file)); return active.find(file => file.path === this.focusPath) || active.find(file => this.timerState(file) === "进行中") || active.filter(file => this.isTodayTask(file)).sort((a, b) => this.compareTasks(a, b))[0] || active.sort((a, b) => this.compareTasks(a, b))[0]; }
+  focusTask(tasks) { const selected = tasks.find(file => file.path === this.focusPath); if (selected) return selected; const active = tasks.filter(file => !this.taskDone(file)); return active.find(file => this.timerState(file) === "进行中") || active.filter(file => this.isTodayTask(file)).sort((a, b) => this.compareTasks(a, b))[0] || active.sort((a, b) => this.compareTasks(a, b))[0]; }
   async setFocus(file) { this.focusPath = file.path; await this.render(); }
-  // Selection only expands the card; focus changes go through setFocus (切换焦点 / 设为焦点 / 开始专注).
-  selectTask(file) { this.selectedTaskPath = this.selectedTaskPath === file.path ? "" : file.path; void this.render(); }
+  // Task labels select the shared focus; documents only open through explicit open actions.
   handleShortcut(event) {
     if (event.defaultPrevented || event.altKey) return;
     const target = event.target;
@@ -224,6 +254,28 @@ class FocusWorkbenchView extends ItemView {
     await this.app.workspace.getLeaf(false).openFile(file);
   }
   button(parent, text, action, cls = "") { const button = parent.createEl("button", { text, cls }); button.addEventListener("click", event => void action(event)); return button; }
+  bindContextEditor(element, file, editor, label) {
+    element.addEventListener("contextmenu", event => { event.preventDefault(); event.stopPropagation(); editor(); });
+    element.addEventListener("keydown", event => { if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); editor(); } });
+    element.setAttribute("title", `${label} · 右键编辑`);
+  }
+  bindCardOpenAndEdit(element, file, editor, label) {
+    element.setAttribute("role", "button"); element.setAttribute("tabindex", "0"); element.setAttribute("aria-label", `${label}；左键打开，右键编辑`);
+    element.addEventListener("click", event => { if (event.target.closest?.("button")) return; void this.openFile(file); });
+    element.addEventListener("keydown", event => { if ((event.key === "Enter" || event.key === " ") && !event.shiftKey) { event.preventDefault(); void this.openFile(file); } });
+    this.bindContextEditor(element, file, editor, label);
+  }
+  bindTaskLabel(element, file, label) {
+    this.bindContextEditor(element, file, () => this.editTask(file), label);
+    element.setAttribute("title", `${label} · 左键聚焦 · 右键编辑`);
+    element.setAttribute("aria-label", `${label}；左键设为聚焦任务，右键编辑`);
+  }
+  bindTaskFocusAndEdit(element, file, label) {
+    element.setAttribute("role", "button"); element.setAttribute("tabindex", "0");
+    element.addEventListener("click", event => { if (event.target.closest?.("button")) return; void this.setFocus(file); });
+    element.addEventListener("keydown", event => { if ((event.key === "Enter" || event.key === " ") && !event.shiftKey) { event.preventDefault(); void this.setFocus(file); } });
+    this.bindTaskLabel(element, file, label);
+  }
   isOvertime(file) { const expected = this.expectedSeconds(file); return expected > 0 && this.elapsedSeconds(file) > expected; }
   remainingPercent(file) {
     const expected = this.expectedSeconds(file);
@@ -318,8 +370,9 @@ class FocusWorkbenchView extends ItemView {
     const project = focus ? String(this.taskProperty(focus, "projectField") || "未关联项目").replace(/^\[\[|\]\]$/g, "") : "创建一项任务后，它会自动出现在这里。";
     copy.createSpan({ text: focus ? `${project} · ${this.taskStatus(focus)} · ${this.priority(focus)}` : project });
     if (focus) this.timer(copy, focus);
+    if (focus) this.bindTaskFocusAndEdit(focusCard, focus, `任务：${focus.basename}`);
     const actions = focusCard.createDiv({ cls: "pvd-actions" });
-    if (focus) { this.button(actions, this.timerState(focus) === "进行中" ? "暂停专注" : "开始专注", () => this.toggleTimer(focus), "mod-cta"); this.button(actions, "编辑", () => this.editTask(focus)); this.button(actions, "完成", () => this.complete(focus)); this.button(actions, "查看", () => this.openFile(focus)); }
+    if (focus) { if (!this.taskDone(focus)) { this.button(actions, this.timerState(focus) === "进行中" ? "暂停专注" : "开始专注", () => this.toggleTimer(focus), "mod-cta"); this.button(actions, "完成", () => this.complete(focus)); } this.button(actions, "查看", () => this.openFile(focus)); }
     else this.button(actions, "新建任务", () => this.createTask(), "mod-cta");
 
     const quick = shell.createDiv({ cls: "pvd-quick" });
@@ -336,7 +389,7 @@ class FocusWorkbenchView extends ItemView {
     inbox.forEach(file => {
       const row = ideas.createDiv({ cls: "pvd-idea" }); const tags = Array.isArray(this.meta(file).tags) ? this.meta(file).tags.slice(0, 2).map(tag => `#${tag}`).join(" ") : "未分类";
       const ideaCopy = row.createDiv(); ideaCopy.createEl("strong", { text: this.ideaTitle(file) }); ideaCopy.createSpan({ text: `${tags} · ${this.ideaTimeLabel(file)}` });
-      const ideaActions = row.createDiv({ cls: "pvd-actions" }); this.button(ideaActions, "打开", () => this.openFile(file)); this.button(ideaActions, "去处理", async () => { this.tab = "knowledge"; await this.render(); });
+      row.createSpan({ cls: "pvd-card-edit-hint", text: "左键打开 · 右键编辑" }); this.bindCardOpenAndEdit(row, file, () => this.editIdea(file), `闪念：${this.ideaTitle(file)}`);
     });
     const stream = shell.createEl("section", { cls: "pvd-card pvd-stream" });
     stream.createEl("h2", { text: "卡片笔记知识流" }); stream.createEl("p", { text: "闪念笔记捕捉想法，文献笔记保留来源与输入，永久笔记沉淀为可复用的独立知识。" });
@@ -345,7 +398,7 @@ class FocusWorkbenchView extends ItemView {
       const lane = lanes.createDiv({ cls: "pvd-lane" }); lane.createEl("h3", { text: name });
       const notes = this.files().filter(file => this.starts(file, dir) && this.useful(file)).sort((a, b) => b.stat.mtime - a.stat.mtime).slice(0, 3);
       if (!notes.length) lane.createEl("span", { text: "暂无笔记" });
-      notes.forEach(file => { const note = this.button(lane, "", () => this.openFile(file), "pvd-note"); note.createEl("strong", { text: file.basename }); });
+      notes.forEach(file => { const note = this.button(lane, "", () => this.openFile(file), "pvd-note"); note.createEl("strong", { text: file.basename }); if (this.starts(file, cfg.inbox)) this.bindContextEditor(note, file, () => this.editIdea(file), `闪念：${this.ideaTitle(file)}`); });
     });
   }
 
@@ -376,6 +429,7 @@ class FocusWorkbenchView extends ItemView {
     return Math.max(0, Math.floor((today.getTime() - captured.getTime()) / 86400000));
   }
   ideaTitle(file) { return file.basename.replace(/^\d{4}-\d{2}-\d{2}\s+/, ""); }
+  ideaTags(file) { const tags = this.meta(file).tags; return (Array.isArray(tags) ? tags : tags ? [tags] : []).map(tag => String(tag).replace(/^#/, "")).filter(Boolean); }
   ideaTimeLabel(file) {
     const age = this.ideaAgeDays(file);
     if (age === 0) return "今天捕捉 · 剩 7 天";
@@ -387,24 +441,28 @@ class FocusWorkbenchView extends ItemView {
     const pending = this.pendingIdeas().sort((a, b) => this.ideaCapturedAt(a) - this.ideaCapturedAt(b));
     const current = pending.filter(file => this.ideaAgeDays(file) <= 7);
     const overdue = pending.filter(file => this.ideaAgeDays(file) > 7);
+    const dueToday = pending.filter(file => this.ideaAgeDays(file) === 7);
+    const settled = this.knowledgeGroups().filter(group => group.key !== "fleeting").reduce((total, group) => total + this.knowledgeNotes(group).length, 0);
     const desk = shell.createEl("section", { cls: "pvd-card pvd-idea-desk" });
     const head = desk.createDiv({ cls: "pvd-idea-desk-head" });
-    const copy = head.createDiv(); copy.createEl("p", { text: "7-DAY TRIAGE" }); copy.createEl("h2", { text: "闪念处理台" }); copy.createEl("span", { text: "闪念不是库存。每周判断一次：行动、补充来源、沉淀观点，或放弃。" });
-    const summary = head.createDiv({ cls: "pvd-idea-summary", attr: { "aria-label": `待处理 ${pending.length} 条，其中逾期 ${overdue.length} 条` } });
+    const copy = head.createDiv(); copy.createEl("p", { text: "CARD NOTE FLOW" }); copy.createEl("h2", { text: "从行动到知识" }); copy.createEl("span", { text: "任务旁捕捉闪念，七天内补清上下文，再沉淀为永久笔记、归档为文献笔记，或明确舍弃。" });
+    const summary = head.createDiv({ cls: "pvd-idea-summary", attr: { "aria-label": `待处理 ${pending.length} 条，今日到期 ${dueToday.length} 条，逾期 ${overdue.length} 条，已沉淀 ${settled} 篇` } });
     const total = summary.createDiv(); total.createEl("strong", { text: String(pending.length) }); total.createSpan({ text: "待处理" });
+    const due = summary.createDiv({ cls: dueToday.length ? "is-due" : "" }); due.createEl("strong", { text: String(dueToday.length) }); due.createSpan({ text: "今日到期" });
     const late = summary.createDiv({ cls: overdue.length ? "is-alert" : "" }); late.createEl("strong", { text: String(overdue.length) }); late.createSpan({ text: "已逾期" });
-    const timeline = desk.createDiv({ cls: "pvd-idea-timeline", attr: { role: "img", "aria-label": "闪念笔记七天处理流程：当天捕捉，一到六天内澄清，第七天前完成分流" } });
-    [["DAY 0", "快速捕捉", "只记录想法，不急着分类"], ["DAY 1–6", "补充与澄清", "写清上下文、来源和下一步"], ["BEFORE DAY 7", "完成分流", "任务 / 文献 / 永久 / 丢弃"]].forEach(([day, title, description], index) => {
+    const done = summary.createDiv(); done.createEl("strong", { text: String(settled) }); done.createSpan({ text: "知识笔记" });
+    const timeline = desk.createDiv({ cls: "pvd-idea-timeline", attr: { role: "img", "aria-label": "卡片笔记流程：从任务或想法捕捉闪念，七天内澄清，并分流为永久笔记、文献笔记、任务或舍弃" } });
+    [["TASK / IDEA", "就地捕捉", "在任务旁一键建立关联闪念"], ["DAY 0–6", "澄清闪念", "一次只保留一个想法，补足来源与上下文"], ["DAY 7", "必须分流", "沉淀永久 / 归档文献 / 转任务 / 舍弃"]].forEach(([day, title, description], index) => {
       const step = timeline.createDiv({ cls: "pvd-idea-time-step" }); step.createEl("b", { text: day }); step.createEl("strong", { text: title }); step.createSpan({ text: description });
       if (index < 2) timeline.createSpan({ cls: "pvd-idea-time-arrow", text: "→", attr: { "aria-hidden": "true" } });
     });
     const outcomes = desk.createDiv({ cls: "pvd-idea-outcomes" });
-    [["任务", "有明确行动与完成标准", "task"], ["文献笔记", "来自书籍、文章或外部资料", "literature"], ["永久笔记", "能用自己的话独立表达一个观点", "permanent"], ["丢弃", "无价值、重复或已失去时效", "discard"]].forEach(([name, description, kind]) => {
+    [["永久笔记", "一个独立观点，用自己的话表达并可复用", "permanent"], ["文献笔记", "保留书籍、文章或外部资料的来源语境", "literature"], ["任务", "想法已经形成明确行动与完成标准", "task"], ["舍弃", "重复、无价值或已失去时效，不继续囤积", "discard"]].forEach(([name, description, kind]) => {
       const outcome = outcomes.createDiv({ cls: `pvd-idea-outcome is-${kind}` }); outcome.createEl("strong", { text: name }); outcome.createSpan({ text: description });
     });
     const queues = desk.createDiv({ cls: "pvd-idea-queues" });
-    this.renderIdeaQueue(queues, "本周待处理", "优先清空最早捕捉的闪念", current, false);
-    this.renderIdeaQueue(queues, "超过 7 天", "先做去留判断，避免收件箱持续堆积", overdue, true);
+    this.renderIdeaQueue(queues, "超过 7 天 · 优先处理", "这些闪念已经超过暂存周期，请先做去留判断", overdue, true);
+    this.renderIdeaQueue(queues, "七天处理期", "按最早捕捉顺序整理；第七天必须完成分流", current, false);
   }
   renderIdeaQueue(parent, title, description, files, overdue) {
     const queue = parent.createEl("section", { cls: `pvd-idea-queue ${overdue ? "is-overdue" : ""}` });
@@ -414,30 +472,56 @@ class FocusWorkbenchView extends ItemView {
     files.forEach(file => this.renderIdeaTriageCard(list, file, overdue));
   }
   renderIdeaTriageCard(parent, file, overdue) {
-    const card = parent.createEl("article", { cls: `pvd-triage-card ${overdue ? "is-overdue" : ""}` });
+    const age = this.ideaAgeDays(file); const linkedTask = this.ideaLinkedTask(file);
+    const card = parent.createEl("article", { cls: `pvd-triage-card ${overdue ? "is-overdue" : age === 7 ? "is-due" : ""}` });
     const copy = card.createDiv({ cls: "pvd-triage-copy" });
-    const eyebrow = copy.createDiv({ cls: "pvd-triage-meta" }); eyebrow.createSpan({ text: overdue ? "需要立即判断" : "7 天处理期" }); eyebrow.createSpan({ text: this.ideaTimeLabel(file) });
+    const eyebrow = copy.createDiv({ cls: "pvd-triage-meta" }); eyebrow.createSpan({ text: overdue ? "已逾期 · 立即判断" : age === 7 ? "今天必须分流" : "七天处理期" }); eyebrow.createSpan({ text: this.ideaTimeLabel(file) });
+    if (linkedTask) eyebrow.createSpan({ cls: "is-linked", text: `来自任务 · ${linkedTask.basename}` });
     copy.createEl("h4", { text: this.ideaTitle(file) });
     const tags = Array.isArray(this.meta(file).tags) ? this.meta(file).tags.slice(0, 3).map(tag => `#${tag}`).join(" ") : "";
     copy.createEl("p", { text: tags || `捕捉于 ${this.dateKey(this.ideaCapturedAt(file))}` });
-    const actions = card.createDiv({ cls: "pvd-triage-actions" });
-    this.button(actions, "转为任务", () => this.convertIdeaToTask(file), "mod-cta");
-    this.button(actions, "转文献", () => this.convertIdeaToNote(file, "literature"));
-    this.button(actions, "转永久", () => this.convertIdeaToNote(file, "permanent"));
-    this.button(actions, "打开", () => this.openFile(file));
-    this.button(actions, "丢弃", () => this.discardIdea(file), "pvd-danger");
+    const ageTrack = card.createDiv({ cls: "pvd-idea-age", attr: { role: "progressbar", "aria-label": "闪念处理周期", "aria-valuemin": "0", "aria-valuemax": "7", "aria-valuenow": String(Math.min(age, 7)) } });
+    ageTrack.createSpan({ attr: { style: `width:${Math.min(100, Math.round(age / 7 * 100))}%` } });
+    card.createSpan({ cls: "pvd-card-edit-hint", text: "左键打开正文 · 右键编辑与分流" });
+    this.bindCardOpenAndEdit(card, file, () => this.editIdea(file), `闪念：${this.ideaTitle(file)}`);
+  }
+  ideaLinkedTask(file) {
+    const value = this.meta(file)["关联任务"]; const raw = Array.isArray(value) ? value[0] : value;
+    const link = String(raw || "").match(/\[\[([^\]|#]+)/)?.[1];
+    return link ? this.app.metadataCache.getFirstLinkpathDest(link, file.path) : null;
+  }
+  async replaceTaskIdeaLink(task, previousPath, nextPath = "") {
+    if (!task) return;
+    const previousLink = `[[${previousPath.replace(/\.md$/, "")}]]`; const nextLink = nextPath ? `[[${nextPath.replace(/\.md$/, "")}]]` : "";
+    await this.app.fileManager.processFrontMatter(task, fm => {
+      const current = Array.isArray(fm["关联闪念"]) ? fm["关联闪念"] : fm["关联闪念"] ? [fm["关联闪念"]] : [];
+      const updated = current.map(value => String(value) === previousLink ? nextLink : value).filter(Boolean);
+      if (updated.length) fm["关联闪念"] = updated; else delete fm["关联闪念"];
+    });
   }
   renderKnowledge(shell) {
     const groups = this.knowledgeGroups();
+    const pending = this.pendingIdeas();
+    const notes = groups.filter(group => group.key !== "fleeting").reduce((total, group) => total + this.knowledgeNotes(group).length, 0);
+    const overview = shell.createDiv({ cls: "pvd-task-overview pvd-knowledge-overview" });
+    overview.createEl("span", { text: `待处理闪念 ${pending.length} 条 · 已收录笔记 ${notes} 篇 · 在这里检索、整理并沉淀知识` });
+    const quickCreate = shell.createEl("section", { cls: "pvd-today-actions pvd-knowledge-actions" });
+    const quickCopy = quickCreate.createDiv({ cls: "pvd-today-actions-copy" });
+    quickCopy.createEl("strong", { text: "捕捉要快，分流要明确" });
+    quickCopy.createSpan({ text: pending.length ? `当前有 ${pending.length} 条闪念；优先处理超过七天的内容` : "收件箱已清空，可以记录下一条想法" });
+    this.button(quickCreate, "＋ 记录闪念", () => this.createIdea(), "mod-cta");
     this.renderIdeaProcessingDesk(shell);
-    const toolbar = shell.createDiv({ cls: "pvd-article-toolbar" });
+    const libraryHead = shell.createDiv({ cls: "pvd-knowledge-library-head" });
+    const libraryCopy = libraryHead.createDiv(); libraryCopy.createEl("p", { text: "KNOWLEDGE LIBRARY" }); libraryCopy.createEl("h2", { text: "知识卡片库" }); libraryCopy.createSpan({ text: "检索已经沉淀或仍在处理的卡片笔记。" });
+    const controls = shell.createEl("section", { cls: "pvd-card pvd-task-controls pvd-knowledge-controls" });
+    const toolbar = controls.createDiv({ cls: "pvd-task-toolbar pvd-article-toolbar" });
     const search = toolbar.createEl("input", { cls: "pvd-task-search", type: "search", placeholder: "搜索文章标题…", value: this.knowledgeSearch, attr: { "aria-label": "搜索文章" } });
     search.addEventListener("input", event => { this.knowledgeSearch = event.target.value; this.renderArticleResults(this.articleResultsEl, groups); });
-    this.button(toolbar, "＋ 记录闪念", () => this.createIdea(), "mod-cta");
-    const filters = shell.createDiv({ cls: "pvd-filter pvd-article-filter" });
+    toolbar.createSpan({ cls: "pvd-knowledge-search-hint", text: "按标题筛选知识库" });
+    const filters = controls.createDiv({ cls: "pvd-filter pvd-article-filter" });
     // Partial update like the search box: keep scroll position and avoid rebuilding the whole tab.
     [["all", "全部文章"], ...groups.map(group => [group.key, group.name])].forEach(([key, label]) => this.button(filters, label, event => { this.knowledgeFilter = key; filters.querySelectorAll("button").forEach(option => option.removeClass("is-active")); event.currentTarget.addClass("is-active"); this.renderArticleResults(this.articleResultsEl, groups); }, this.knowledgeFilter === key ? "is-active" : ""));
-    const results = shell.createDiv({ cls: "pvd-article-results" }); this.articleResultsEl = results; this.renderArticleResults(results, groups);
+    const results = shell.createDiv({ cls: "pvd-article-results pvd-knowledge-results" }); this.articleResultsEl = results; this.renderArticleResults(results, groups);
   }
   renderArticleResults(parent, groups = this.knowledgeGroups()) {
     parent.empty(); const query = this.knowledgeSearch.trim().toLocaleLowerCase();
@@ -446,7 +530,7 @@ class FocusWorkbenchView extends ItemView {
       const section = parent.createEl("section", { cls: "pvd-card pvd-article-group" }); const notes = this.knowledgeNotes(group).filter(file => !query || file.basename.toLocaleLowerCase().includes(query));
       const head = section.createDiv({ cls: "pvd-section-head" }); const copy = head.createDiv(); copy.createEl("h2", { text: group.name }); copy.createEl("p", { text: `${group.description} · ${notes.length} 篇` });
       if (!notes.length) { section.createEl("p", { text: "暂无匹配文章。" }); return; }
-      const list = section.createDiv({ cls: "pvd-article-list" }); notes.slice(0, 60).forEach(file => { const article = this.button(list, "", () => this.openFile(file), "pvd-article"); const text = article.createDiv(); text.createEl("strong", { text: file.basename }); text.createSpan({ text: this.dateKey(new Date(file.stat.mtime)) }); article.createEl("span", { text: "打开 →", cls: "pvd-article-open" }); });
+      const list = section.createDiv({ cls: "pvd-article-list" }); notes.slice(0, 60).forEach(file => { const article = this.button(list, "", () => this.openFile(file), "pvd-article"); const text = article.createDiv(); text.createEl("strong", { text: file.basename }); text.createSpan({ text: this.dateKey(new Date(file.stat.mtime)) }); article.createEl("span", { text: group.key === "fleeting" ? "右键编辑" : "打开 →", cls: "pvd-article-open" }); if (group.key === "fleeting") this.bindContextEditor(article, file, () => this.editIdea(file), `闪念：${this.ideaTitle(file)}`); });
     });
   }
 
@@ -467,24 +551,24 @@ class FocusWorkbenchView extends ItemView {
       const dayEl = grid.createDiv({ cls: `pvd-calendar-day ${dateKey === todayKey ? "is-today" : ""} ${dayTasks.length ? "has-tasks" : ""}` });
       const label = dayEl.createDiv({ cls: "pvd-calendar-day-label" }); label.createEl("strong", { text: String(day) }); if (dateKey === todayKey) label.createSpan({ text: "今天" });
       const list = dayEl.createDiv({ cls: "pvd-calendar-task-list" });
-      dayTasks.slice(0, 3).forEach(file => { const chip = this.button(list, file.basename, () => { this.focusPath = file.path; this.selectedTaskPath = file.path; void this.render(); }, `pvd-calendar-task ${this.taskDone(file) ? "is-done" : ""} ${this.priority(file).toLowerCase()}`); chip.setAttribute("title", `${file.basename} · ${this.taskStatus(file)}`); });
+      dayTasks.slice(0, 3).forEach(file => { const chip = this.button(list, file.basename, () => this.setFocus(file), `pvd-calendar-task ${this.taskDone(file) ? "is-done" : ""} ${this.priority(file).toLowerCase()}`); this.bindTaskLabel(chip, file, `任务：${file.basename} · ${this.taskStatus(file)}`); });
       if (dayTasks.length > 3) dayEl.createEl("span", { cls: "pvd-calendar-more", text: `+${dayTasks.length - 3} 项任务` });
     }
     const trailing = (7 - ((firstOffset + days) % 7)) % 7; for (let index = 0; index < trailing; index += 1) grid.createDiv({ cls: "pvd-calendar-day is-empty", attr: { "aria-hidden": "true" } });
   }
 
   renderFocusPanel(parent, tasks) {
-    const active = tasks.filter(file => !this.taskDone(file)); const focus = this.focusTask(tasks);
+    const focus = this.focusTask(tasks);
     const mission = parent.createEl("section", { cls: "pvd-card pvd-mission pvd-water-focus-v2" });
     if (!focus) { mission.createEl("p", { text: "CURRENT FOCUS" }); mission.createEl("h2", { text: "还没有待推进的任务" }); this.button(mission, "新建任务", () => this.createTask(), "mod-cta"); return; }
     const missionHead = mission.createDiv({ cls: "pvd-mission-head" }); const missionCopy = missionHead.createDiv({ cls: "pvd-mission-copy" });
     missionCopy.createEl("p", { text: "CURRENT FOCUS" }); missionCopy.createEl("h2", { text: focus.basename });
     const missionMeta = missionCopy.createDiv({ cls: "pvd-mission-meta" }); this.timer(missionMeta, focus);
     const project = String(this.taskProperty(focus, "projectField") || "未关联项目").replace(/^\[\[|\]\]$/g, ""); missionMeta.createSpan({ text: `${project} · ${this.priority(focus)}` });
+    this.bindTaskFocusAndEdit(mission, focus, `任务：${focus.basename}`);
     this.countdownLiquid(mission, focus);
     const track = mission.createDiv({ cls: "pvd-stage" }); ["待做", "进行中", "暂停", "完成"].forEach(stage => track.createEl("span", { text: stage, cls: this.taskStatus(focus) === stage ? "is-current" : this.taskDone(focus) ? "is-done" : "" }));
-    const actions = mission.createDiv({ cls: "pvd-actions" }); this.button(actions, this.timerState(focus) === "进行中" ? "暂停专注" : "开始专注", () => this.toggleTimer(focus), "mod-cta"); this.button(actions, "编辑", () => this.editTask(focus)); this.button(actions, "完成", () => this.complete(focus));
-    const switcher = mission.createDiv({ cls: "pvd-focus-switcher" }); switcher.createSpan({ text: "切换焦点" }); const chips = switcher.createDiv(); active.sort((a, b) => this.compareTasks(a, b)).slice(0, 6).forEach(file => this.button(chips, file.basename, () => this.setFocus(file), file.path === focus.path ? "is-active" : ""));
+    if (!this.taskDone(focus)) { const actions = mission.createDiv({ cls: "pvd-actions" }); this.button(actions, this.timerState(focus) === "进行中" ? "暂停专注" : "开始专注", () => this.toggleTimer(focus), "mod-cta"); this.button(actions, "完成", () => this.complete(focus)); }
   }
 
   visualTasks(tasks) {
@@ -531,7 +615,7 @@ class FocusWorkbenchView extends ItemView {
     const header = board.createDiv({ cls: "pvd-timeline-header" }); header.createSpan({ text: "排期" }); dates.forEach(date => { const day = header.createSpan(); day.createEl("b", { text: String(date.getDate()) }); day.createEl("em", { text: ["日", "一", "二", "三", "四", "五", "六"][date.getDay()] }); if (this.dateKey(date) === this.todayKey()) day.addClass("is-today"); });
     const groups = new Map(); scheduled.forEach(file => { const project = String(this.taskProperty(file, "projectField") || "未关联项目").replace(/^\[\[|\]\]$/g, ""); if (!groups.has(project)) groups.set(project, []); groups.get(project).push(file); });
     if (!groups.size) board.createEl("p", { cls: "pvd-timeline-empty", text: "当前日期范围内没有已排期任务。" });
-    groups.forEach((files, project) => { files.sort((a, b) => this.compareTasks(a, b)); const lane = board.createDiv({ cls: "pvd-timeline-lane" }); const laneRows = Math.max(files.length, 1); lane.style.setProperty("--pvd-lane-rows", String(laneRows)); lane.style.minHeight = `${laneRows * 36 + 18}px`; const label = lane.createDiv({ cls: "pvd-timeline-project" }); label.createEl("strong", { text: project }); label.createSpan({ text: `${files.length} 项` }); const track = lane.createDiv({ cls: "pvd-timeline-track" }); dates.forEach((date, index) => { const cell = track.createDiv({ cls: "pvd-timeline-cell" }); cell.style.gridColumn = String(index + 1); }); const todayIndex = dates.findIndex(date => this.dateKey(date) === this.todayKey()); if (todayIndex >= 0) { const marker = track.createDiv({ cls: "pvd-timeline-today-line", attr: { "aria-hidden": "true" } }); marker.style.gridColumn = String(todayIndex + 1); } files.forEach((file, rowIndex) => { const key = this.taskPlanKey(file); const index = dates.findIndex(date => this.dateKey(date) === key); if (index < 0) return; const chip = this.button(track, file.basename, () => { this.focusPath = file.path; this.selectedTaskPath = file.path; void this.render(); }, `pvd-timeline-task ${this.priority(file).toLowerCase()} ${this.taskDone(file) ? "is-done" : ""}`); chip.style.gridColumn = String(index + 1); chip.style.gridRow = String(rowIndex + 1); chip.setAttribute("title", `${file.basename} · ${key} · ${this.taskStatus(file)}`); }); });
+    groups.forEach((files, project) => { files.sort((a, b) => this.compareTasks(a, b)); const lane = board.createDiv({ cls: "pvd-timeline-lane" }); const laneRows = Math.max(files.length, 1); lane.style.setProperty("--pvd-lane-rows", String(laneRows)); lane.style.minHeight = `${laneRows * 36 + 18}px`; const label = lane.createDiv({ cls: "pvd-timeline-project" }); label.createEl("strong", { text: project }); label.createSpan({ text: `${files.length} 项` }); const track = lane.createDiv({ cls: "pvd-timeline-track" }); dates.forEach((date, index) => { const cell = track.createDiv({ cls: "pvd-timeline-cell" }); cell.style.gridColumn = String(index + 1); }); const todayIndex = dates.findIndex(date => this.dateKey(date) === this.todayKey()); if (todayIndex >= 0) { const marker = track.createDiv({ cls: "pvd-timeline-today-line", attr: { "aria-hidden": "true" } }); marker.style.gridColumn = String(todayIndex + 1); } files.forEach((file, rowIndex) => { const key = this.taskPlanKey(file); const index = dates.findIndex(date => this.dateKey(date) === key); if (index < 0) return; const chip = this.button(track, file.basename, () => this.setFocus(file), `pvd-timeline-task ${this.priority(file).toLowerCase()} ${this.taskDone(file) ? "is-done" : ""}`); chip.style.gridColumn = String(index + 1); chip.style.gridRow = String(rowIndex + 1); this.bindTaskLabel(chip, file, `任务：${file.basename} · ${key} · ${this.taskStatus(file)}`); }); });
     const overdue = tasks.filter(file => !this.taskDone(file) && this.taskPlanKey(file) && this.taskPlanKey(file) < startKey); const unscheduled = tasks.filter(file => !this.taskPlanKey(file));
     const foot = card.createDiv({ cls: "pvd-timeline-foot" }); if (overdue.length) foot.createSpan({ text: `范围外逾期 ${overdue.length} 项` }); if (unscheduled.length) foot.createSpan({ text: `未排期 ${unscheduled.length} 项` });
   }
@@ -611,24 +695,22 @@ class FocusWorkbenchView extends ItemView {
   }
 
   renderTaskCard(parent, file) {
-    const selected = this.selectedTaskPath === file.path;
-    const card = parent.createDiv({ cls: `pvd-task ${this.taskDone(file) ? "is-done" : ""} ${selected ? "is-selected" : ""}`, attr: { role: "button", tabindex: "0", "aria-expanded": String(selected) } });
-    card.addEventListener("click", () => this.selectTask(file));
-    card.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); this.selectTask(file); } });
+    const card = parent.createDiv({ cls: `pvd-task ${this.taskDone(file) ? "is-done" : ""} ${this.focusPath === file.path ? "is-focus" : ""}` });
+    if (this.focusPath === file.path) card.setAttribute("aria-current", "true");
+    this.bindTaskFocusAndEdit(card, file, `任务：${file.basename}`);
     const stop = action => async event => { event.stopPropagation(); await action(); };
     const main = card.createDiv(); main.createEl("strong", { text: file.basename });
     const project = String(this.taskProperty(file, "projectField") || "未关联项目").replace(/^\[\[|\]\]$/g, "");
     main.createSpan({ text: `${project} · ${this.taskPlan(file) ? this.dateKey(this.taskPlan(file)) : "未安排日期"}` }); this.timer(main, file);
     const side = card.createDiv({ cls: "pvd-task-card-side" });
     const badges = side.createDiv({ cls: "pvd-badges" }); badges.createSpan({ text: this.priority(file) }); badges.createSpan({ text: this.taskStatus(file) });
-    const open = this.button(side, "打开文档 ↗", stop(() => this.openFile(file)), "pvd-task-open");
+    const quick = side.createDiv({ cls: "pvd-task-card-quick" });
+    const open = this.button(quick, "打开文档 ↗", stop(() => this.openFile(file)), "pvd-task-open");
     open.setAttribute("aria-label", `打开任务文档：${file.basename}`);
     open.setAttribute("title", file.path);
-    if (!selected) return;
-    const actions = card.createDiv({ cls: "pvd-actions pvd-task-actions" });
-    if (!this.taskDone(file)) { this.button(actions, this.timerState(file) === "进行中" ? "暂停专注" : "开始专注", stop(() => this.toggleTimer(file)), "mod-cta"); this.button(actions, "标记完成", stop(() => this.complete(file))); if (this.focusPath !== file.path) this.button(actions, "设为焦点", stop(() => this.setFocus(file))); }
-    this.button(actions, "编辑详情", stop(() => this.editTask(file)));
-    this.button(actions, "删除", stop(() => this.deleteTask(file)), "pvd-danger");
+    const capture = this.button(quick, "＋ 关联闪念", stop(() => this.createIdeaForTask(file)), "pvd-task-idea");
+    capture.setAttribute("aria-label", `为任务“${file.basename}”创建关联闪念笔记`);
+    main.createSpan({ cls: "pvd-card-edit-hint", text: "左键聚焦 · 右键编辑" });
   }
 
   async ensureFolder(dir) { let current = ""; for (const part of dir.split("/").filter(Boolean)) { current = current ? `${current}/${part}` : part; if (!this.app.vault.getAbstractFileByPath(current)) await this.app.vault.createFolder(current); } }
@@ -641,8 +723,32 @@ class FocusWorkbenchView extends ItemView {
     return "";
   }
   uniquePath(dir, title) { const date = this.dateKey(); let path = `${dir}/${date} ${title}.md`; let index = 2; while (this.app.vault.getAbstractFileByPath(path)) path = `${dir}/${date} ${title} ${index++}.md`; return path; }
+  uniqueIdeaRenamePath(file, title) { const dir = file.path.includes("/") ? file.path.slice(0, file.path.lastIndexOf("/")) : ""; const date = file.basename.match(/^\d{4}-\d{2}-\d{2}/)?.[0] || this.dateKey(this.ideaCapturedAt(file)); const base = `${date} ${title}`; let path = `${dir ? `${dir}/` : ""}${base}.md`; let index = 2; while (this.app.vault.getAbstractFileByPath(path) && path !== file.path) path = `${dir ? `${dir}/` : ""}${base} ${index++}.md`; return path; }
   uniqueTaskPath(dir, title) { let path = `${dir}/${title}.md`; let index = 2; while (this.app.vault.getAbstractFileByPath(path)) path = `${dir}/${title} ${index++}.md`; return path; }
   uniqueMovePath(dir, file) { let path = `${dir}/${file.name}`; let index = 2; while (this.app.vault.getAbstractFileByPath(path) && path !== file.path) path = `${dir}/${file.basename} ${index++}.${file.extension}`; return path; }
+  async createIdeaForTask(task) {
+    const dir = this.config().inbox; const taskLink = `[[${task.path.replace(/\.md$/, "")}]]`;
+    await this.ensureFolder(dir);
+    const title = `${task.basename} · 闪念`;
+    const idea = await this.app.vault.create(this.uniquePath(dir, title), `---\ntype: 闪念笔记\n状态: 收集\ndate: ${this.dateKey()}\n关联任务: ${taskLink}\n---\n\n# ${title}\n\n关联任务：${taskLink}\n\n`);
+    await this.app.fileManager.processFrontMatter(task, fm => {
+      const ideaLink = `[[${idea.path.replace(/\.md$/, "")}]]`;
+      const existing = Array.isArray(fm["关联闪念"]) ? fm["关联闪念"] : fm["关联闪念"] ? [fm["关联闪念"]] : [];
+      if (!existing.includes(ideaLink)) fm["关联闪念"] = [...existing, ideaLink];
+    });
+    new Notice("已创建关联闪念，并写入双向链接"); await this.openFile(idea); await this.render();
+  }
+  editIdea(file) { new IdeaEditorModal(this.app, this, file).open(); }
+  async updateIdea(file, values) {
+    const previousPath = file.path; const linkedTask = this.ideaLinkedTask(file); const title = values.title.trim();
+    const tags = [...new Set(String(values.tags || "").split(/[,，\s]+/).map(tag => tag.trim().replace(/^#/, "")).filter(Boolean))];
+    await this.app.fileManager.processFrontMatter(file, fm => { if (tags.length) fm.tags = tags; else delete fm.tags; });
+    const content = await this.app.vault.cachedRead(file); const nextContent = /^# .+$/m.test(content) ? content.replace(/^# .+$/m, `# ${title}`) : `${content.trimEnd()}\n\n# ${title}\n`;
+    if (nextContent !== content) await this.app.vault.modify(file, nextContent);
+    const nextPath = this.uniqueIdeaRenamePath(file, title); if (nextPath !== file.path) await this.app.fileManager.renameFile(file, nextPath);
+    if (linkedTask && nextPath !== previousPath) await this.replaceTaskIdeaLink(linkedTask, previousPath, nextPath);
+    new Notice("闪念笔记已更新"); await this.render();
+  }
   async createIdea() { new TextPromptModal(this.app, "记录灵感", "一句话写下想法", async title => { const dir = this.config().inbox; await this.ensureFolder(dir); const file = await this.app.vault.create(this.uniquePath(dir, title), `---\ntype: 闪念笔记\n状态: 收集\ndate: ${this.dateKey()}\n---\n\n# ${title}\n\n`); await this.openFile(file); await this.render(); }, title => this.validateNoteTitle(title)).open(); }
   async convertIdeaToTask(file) {
     const dir = this.config().task; const title = this.ideaTitle(file); await this.ensureFolder(dir);
@@ -652,15 +758,17 @@ class FocusWorkbenchView extends ItemView {
     new Notice("已从闪念创建任务，并保留双向来源"); await this.render(); await this.openFile(task);
   }
   async convertIdeaToNote(file, kind) {
+    const linkedTask = this.ideaLinkedTask(file); const previousPath = file.path;
     const target = kind === "literature"
       ? { dir: this.config().literature, type: "文献笔记", status: "待整理", notice: "已转为文献笔记" }
       : { dir: this.config().permanent, type: "永久笔记", status: "已沉淀", notice: "已转为永久笔记" };
     await this.ensureFolder(target.dir);
     await this.app.fileManager.processFrontMatter(file, fm => { fm.type = target.type; fm["状态"] = target.status; fm["处理日期"] = this.dateKey(); });
     const path = this.uniqueMovePath(target.dir, file); if (path !== file.path) await this.app.fileManager.renameFile(file, path);
+    if (linkedTask && path !== previousPath) await this.replaceTaskIdeaLink(linkedTask, previousPath, path);
     new Notice(target.notice); await this.render();
   }
-  discardIdea(file) { new ConfirmModal(this.app, "丢弃闪念", `将“${this.ideaTitle(file)}”移入 Obsidian 回收站？`, "丢弃", async () => { await this.app.fileManager.trashFile(file); new Notice("闪念已移入回收站"); await this.render(); }).open(); }
+  discardIdea(file) { new ConfirmModal(this.app, "舍弃闪念", `将“${this.ideaTitle(file)}”移入 Obsidian 回收站，并清理任务中的关联？`, "舍弃", async () => { const linkedTask = this.ideaLinkedTask(file); await this.replaceTaskIdeaLink(linkedTask, file.path); await this.app.fileManager.trashFile(file); new Notice("闪念已移入回收站，任务关联已清理"); await this.render(); }).open(); }
   async createTask() { new TextPromptModal(this.app, "新建任务", "任务标题", async title => { const dir = this.config().task; await this.ensureFolder(dir); const file = await this.app.vault.create(this.uniqueTaskPath(dir, title), await this.newTaskContent(title)); await this.openFile(file); await this.render(); }, title => this.validateNoteTitle(title)).open(); }
   escapeRegExp(text) { return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
   setFrontmatterField(source, field, value) {
@@ -683,6 +791,14 @@ class FocusWorkbenchView extends ItemView {
   }
   async editTask(file) {
     const fm = this.meta(file); const project = String(this.taskProperty(file, "projectField") || "").replace(/^\[\[|\]\]$/g, "");
+    const workflow = [{ label: "打开文档", run: () => this.openFile(file) }];
+    if (!this.taskDone(file)) {
+      workflow.push({ label: this.timerState(file) === "进行中" ? "暂停专注" : "开始专注", cls: "mod-cta", run: () => this.toggleTimer(file) });
+      if (this.focusPath !== file.path) workflow.push({ label: "设为焦点", run: () => this.setFocus(file) });
+      workflow.push({ label: "标记完成", run: () => this.complete(file) });
+    }
+    workflow.push({ label: "＋ 关联闪念", run: () => this.createIdeaForTask(file) });
+    workflow.push({ label: "删除任务", cls: "pvd-danger", run: () => this.deleteTask(file) });
     new TaskEditorModal(this.app, file, { project, priority: this.priority(file), status: this.taskStatus(file), plan: this.taskPlan(file) ? this.dateKey(this.taskPlan(file)) : "", estimate: this.taskProperty(file, "expectedField") || "" }, this.projectOptions(), async values => {
       await this.transitionTask(file, values.status);
       await this.app.fileManager.processFrontMatter(file, next => {
@@ -692,7 +808,7 @@ class FocusWorkbenchView extends ItemView {
         this.setTaskProperty(next, "expectedField", values.estimate ? Number(values.estimate) : "");
       });
       new Notice("任务已更新"); await this.render();
-    }).open();
+    }, workflow).open();
   }
   async deleteTask(file) { new ConfirmModal(this.app, "删除任务", `将“${file.basename}”移入 Obsidian 回收站？`, "删除", async () => { await this.app.fileManager.trashFile(file); new Notice("任务已移入回收站"); await this.render(); }).open(); }
   pauseTimerFrontmatter(fm) {

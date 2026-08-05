@@ -1,0 +1,4 @@
+interface:
+  display_name: "Omni Workbench UI Style"
+  short_description: "Apply the project Claymorphism UI system."
+  default_prompt: "Use this skill to add or modify an Omni Workbench interface while preserving its Claymorphism design system."

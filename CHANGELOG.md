@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.7
+
+### Added
+
+- Tasks can create linked fleeting notes directly, preserving the path from action to captured idea and onward to literature or permanent notes.
+- The knowledge workbench now includes a seven-day fleeting-note triage flow with due, overdue, linked-task, and processing-state visualization.
+- A project-level UI design skill documents and enforces the plugin's Claymorphism theme for future interface changes.
+
+### Changed
+
+- The knowledge workbench now follows the task workbench's visual hierarchy with a roomier, more focused layout.
+- Task and fleeting-note editing has moved from expanded card panels to focused right-click modals.
+- Clicking a task card or task label now sets the current focus instead of opening its document; documents open only through explicit actions.
+- The redundant focus switcher list has been removed from the focus panel.
+
+### Improved
+
+- Completed tasks can be inspected as the current focus without exposing invalid timer or completion actions.
+- Keyboard labels, focus states, responsive layouts, and dark-theme styling now reflect the updated interactions.
+
 ## 0.3.4
 
 ### Added
