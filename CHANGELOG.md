@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.9
+
+### Added
+
+- Creating a task now opens a focused editor modal with title, project, priority, status, planned date, and estimated duration, saving in place without navigating away from the workbench.
+- The knowledge card workflow's two queues (待处理 / 过期闪念) can now be collapsed and expanded.
+
+### Changed
+
+- The fleeting-note processing area is renamed from "闪念处理" to "知识卡片笔记流程", and the home quick action to "知识卡片流程".
+- Queue naming is clarified: "超过 7 天" becomes "过期闪念" and "七天处理期" becomes "待处理", with 待处理 listed above 过期闪念.
+
+### Improved
+
+- The knowledge card workflow now uses a cohesive Claymorphism treatment: unified glass-clay surface for the two queues, refined step badges and flow arrows, tighter spacing, and smoother visual bridging into the knowledge card library.
+- Settings paths are normalized with the official `normalizePath` API for consistent slash, duplicate-slash, and trailing-slash handling.
+
 ## 0.3.8
 
 ### Changed

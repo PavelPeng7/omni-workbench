@@ -1,4 +1,4 @@
-const { ItemView, Modal, Notice, Plugin, PluginSettingTab, Setting } = require("obsidian");
+const { ItemView, Modal, Notice, Plugin, PluginSettingTab, Setting, normalizePath } = require("obsidian");
 
 const VIEW_TYPE = "focus-workbench-view";
 const DEFAULT_SETTINGS = {
@@ -22,20 +22,20 @@ const DEFAULT_SETTINGS = {
 const UI_TEXT_EN = {
   "创建": "Create", "取消": "Cancel", "保存": "Save", "保存修改": "Save changes", "保存配置": "Save configuration",
   "首页": "Home", "任务工作台": "Tasks", "知识工作台": "Knowledge", "打开任务总表": "Open task table", "刷新": "Refresh",
-  "今天，做重要的事。": "Do what matters today.", "任务指挥舱": "Task command center", "闪念处理与知识流": "Idea triage and knowledge flow",
+  "今天，做重要的事。": "Do what matters today.", "任务指挥舱": "Task command center", "知识卡片笔记流程": "Card-note workflow",
   "还没有可推进的任务": "No actionable tasks yet", "还没有待推进的任务": "No tasks to advance yet", "创建一项任务后，它会自动出现在这里。": "Create a task and it will appear here automatically.",
   "未关联项目": "No project", "开始专注": "Start focus", "暂停专注": "Pause focus", "完成": "Complete", "查看": "View", "新建任务": "New task", "任务标题": "Task title",
-  "记录灵感": "Capture idea", "一句话写下想法": "Write the idea in one sentence", "处理闪念": "Triage ideas", "灵感收集箱": "Idea inbox", "先快速捕捉，之后再整理成任务或知识卡片。": "Capture quickly, then organize it into a task or knowledge card.",
+  "记录灵感": "Capture idea", "一句话写下想法": "Write the idea in one sentence", "知识卡片流程": "Knowledge card flow", "灵感收集箱": "Idea inbox", "先快速捕捉，之后再整理成任务或知识卡片。": "Capture quickly, then organize it into a task or knowledge card.",
   "收集箱是空的。下一条灵感，先记下来。": "Your inbox is empty. Capture the next idea when it arrives.", "未分类": "Uncategorized", "左键打开 · 右键编辑": "Click to open · Right-click to edit",
   "卡片笔记知识流": "Card-note knowledge flow", "闪念笔记捕捉想法，文献笔记保留来源与输入，永久笔记沉淀为可复用的独立知识。": "Fleeting notes capture ideas, literature notes preserve sources, and permanent notes turn them into reusable knowledge.",
   "① 闪念笔记": "① Fleeting notes", "② 文献笔记": "② Literature notes", "③ 永久笔记": "③ Permanent notes", "暂无笔记": "No notes yet",
   "闪念笔记": "Fleeting notes", "文献笔记": "Literature notes", "永久笔记": "Permanent notes", "知识笔记": "Knowledge notes",
   "快速捕捉、尚未整理的想法。": "Quick captures that have not been organized yet.", "带来源、摘录与阅读线索的输入卡片。": "Source cards with excerpts and reading context.", "用自己的话写成、可以独立链接和复用的知识。": "Knowledge written in your own words that can be linked and reused independently.",
-  "从行动到知识": "From action to knowledge", "任务旁捕捉闪念，七天内补清上下文，再沉淀为永久笔记、归档为文献笔记，或明确舍弃。": "Capture ideas beside tasks, clarify them within seven days, then preserve, archive, convert, or discard them.",
+  "任务旁捕捉闪念，七天内补清上下文，再沉淀为永久笔记、归档为文献笔记，或明确舍弃。": "Capture ideas beside tasks, clarify them within seven days, then preserve, archive, convert, or discard them.",
   "待处理": "Pending", "今日到期": "Due today", "已逾期": "Overdue", "就地捕捉": "Capture in context", "澄清闪念": "Clarify the idea", "必须分流": "Decide its destination",
   "在任务旁一键建立关联闪念": "Create a linked idea beside a task", "一次只保留一个想法，补足来源与上下文": "Keep one idea per note and add its source and context", "沉淀永久 / 归档文献 / 转任务 / 舍弃": "Permanent note / Literature note / Task / Discard",
   "一个独立观点，用自己的话表达并可复用": "An independent, reusable idea in your own words", "保留书籍、文章或外部资料的来源语境": "Preserve the source context from books, articles, or external material", "想法已经形成明确行动与完成标准": "The idea now has a clear action and definition of done", "重复、无价值或已失去时效，不继续囤积": "Duplicate, low-value, or outdated—do not keep it",
-  "超过 7 天 · 优先处理": "Over 7 days · Prioritize", "这些闪念已经超过暂存周期，请先做去留判断": "These ideas exceeded the holding period. Decide their destination first.", "七天处理期": "Seven-day review window", "按最早捕捉顺序整理；第七天必须完成分流": "Review oldest first; every idea needs a destination by day seven.",
+  "过期闪念": "Overdue ideas", "这些闪念已经超过暂存周期，请先做去留判断": "These ideas exceeded the holding period. Decide their destination first.", "按最早捕捉顺序整理；第七天必须完成分流": "Review oldest first; every idea needs a destination by day seven.",
   "没有逾期闪念": "No overdue ideas", "本周收件箱已清空": "This week's inbox is clear", "很好，继续保持每周分流。": "Nice work—keep up the weekly review.", "记录新想法后，它会出现在这里。": "New ideas will appear here after you capture them.",
   "已逾期 · 立即判断": "Overdue · Decide now", "今天必须分流": "Decide today", "左键打开正文 · 右键编辑与分流": "Click to open · Right-click to edit and triage", "闪念处理周期": "Idea review cycle",
   "捕捉要快，分流要明确": "Capture quickly, decide clearly", "收件箱已清空，可以记录下一条想法": "The inbox is clear—capture your next idea", "＋ 记录闪念": "+ Capture idea",
@@ -48,6 +48,7 @@ const UI_TEXT_EN = {
   "今天要推进什么？": "What will you advance today?", "创建一项任务，开始安排今天": "Create a task to start planning today", "这里还没有任务。": "No tasks here yet.", "未安排日期": "No date", "未设时限": "No time limit", "剩余时间": "Time remaining", "打开文档 ↗": "Open note ↗", "＋ 关联闪念": "+ Linked idea", "左键聚焦 · 右键编辑": "Click to focus · Right-click to edit",
   "编辑任务": "Edit task", "修改任务属性，或直接执行常用工作流。卡片本身保持简洁，不再展开操作面板。": "Edit task properties or run a common workflow. Task cards stay compact and focused.", "所属项目": "Project", "优先级": "Priority", "任务状态": "Task status", "计划日期": "Planned date", "预计耗时（分钟）": "Estimate (minutes)", "快捷操作": "Quick actions",
   "打开文档": "Open note", "设为焦点": "Set as focus", "标记完成": "Mark complete", "删除任务": "Delete task", "预计耗时请输入大于等于 0 的整数分钟数。": "Enter an estimated duration as a whole number of minutes, 0 or greater.",
+  "创建任务": "Create task", "任务已创建": "Task created.", "填写任务属性并保存，任务会写入任务目录，不会离开当前工作台。": "Fill in the task properties and save. The task is written to the task folder without leaving the workbench.",
   "编辑闪念": "Edit idea", "闪念标题": "Idea title", "标签（用逗号或空格分隔）": "Tags (separate with commas or spaces)", "例如：写作, Unity, 设计": "Example: writing, Unity, design", "卡片笔记分流": "Card-note triage",
   "完善后沉淀为永久笔记，保留外部来源时归档为文献笔记；形成明确行动则转任务，无价值则舍弃。": "Turn a refined idea into a permanent note, preserve external sources as literature notes, convert clear actions into tasks, or discard low-value items.", "打开正文": "Open note", "沉淀永久": "Make permanent", "归档文献": "Archive source", "打开来源任务": "Open source task", "转为任务": "Convert to task", "舍弃": "Discard", "舍弃闪念": "Discard idea", "删除": "Delete",
   "连接现有仓库": "Connect an existing vault", "仅在你已有自己的目录或 frontmatter 字段时使用。填写现有位置和字段名，不会移动或修改笔记。": "Use this only if you already have custom folders or frontmatter fields. Existing notes will not be moved or modified.",
@@ -144,13 +145,16 @@ class ConfirmModal extends Modal {
 }
 
 class TaskEditorModal extends Modal {
-  constructor(app, file, data, projects, submit, workflow = []) { super(app); this.file = file; this.data = data; this.projects = projects; this.submit = submit; this.workflow = workflow; }
+  constructor(app, file, data, projects, submit, workflow = [], options = {}) { super(app); this.file = file; this.data = data; this.projects = projects; this.submit = submit; this.workflow = workflow; this.options = options; }
   onOpen() {
     const { contentEl } = this; this.modalEl.addClass("pvd-modal-shell"); contentEl.addClass("pvd-modal"); const data = this.data;
-    contentEl.createEl("h2", { text: `编辑任务：${this.file.basename}` });
-    contentEl.createEl("p", { cls: "pvd-modal-lead", text: "修改任务属性，或直接执行常用工作流。卡片本身保持简洁，不再展开操作面板。" });
+    contentEl.createEl("h2", { text: this.options.heading || `编辑任务：${this.file.basename}` });
+    if (this.options.lead) contentEl.createEl("p", { cls: "pvd-modal-lead", text: this.options.lead });
+    else contentEl.createEl("p", { cls: "pvd-modal-lead", text: "修改任务属性，或直接执行常用工作流。卡片本身保持简洁，不再展开操作面板。" });
     const form = contentEl.createDiv({ cls: "pvd-task-editor" });
     const field = (label, element) => { const row = form.createEl("label"); row.createSpan({ text: label }); row.appendChild(element); return element; };
+    let title = null;
+    if (this.options.mode === "create") { title = field("任务标题", document.createElement("input")); title.type = "text"; title.placeholder = "任务标题"; title.value = String(data.title || ""); }
     const project = field("所属项目", document.createElement("select"));
     project.createEl("option", { text: "未关联项目", value: "" });
     const options = [...new Set([...this.projects, String(data.project || "")].filter(Boolean))].sort((a, b) => a.localeCompare(b, "zh-CN"));
@@ -166,8 +170,16 @@ class TaskEditorModal extends Modal {
       this.workflow.forEach(item => { const button = workflowActions.createEl("button", { text: item.label, cls: item.cls || "" }); button.addEventListener("click", async () => { this.close(); await item.run(); }); });
     }
     const actions = contentEl.createDiv({ cls: "pvd-modal-actions" });
-    const save = actions.createEl("button", { text: "保存", cls: "mod-cta" });
-    save.addEventListener("click", async () => { const minutes = estimate.value.trim(); if (minutes && (!/^\d+$/.test(minutes) || Number(minutes) < 0)) { showNotice("预计耗时请输入大于等于 0 的整数分钟数。"); return; } await this.submit({ project: project.value.trim(), priority: priority.value, status: status.value, plan: date.value, estimate: minutes }); this.close(); });
+    const save = actions.createEl("button", { text: this.options.submitLabel || "保存", cls: "mod-cta" });
+    const commit = async () => {
+      const minutes = estimate.value.trim();
+      if (minutes && (!/^\d+$/.test(minutes) || Number(minutes) < 0)) { showNotice("预计耗时请输入大于等于 0 的整数分钟数。"); return; }
+      const values = { project: project.value.trim(), priority: priority.value, status: status.value, plan: date.value, estimate: minutes };
+      if (title) { const nextTitle = title.value.trim(); const error = this.options.validateTitle ? this.options.validateTitle(nextTitle) : ""; if (error) { showNotice(error); return; } values.title = nextTitle; }
+      await this.submit(values); this.close();
+    };
+    save.addEventListener("click", () => void commit());
+    if (title) { title.addEventListener("keydown", event => { if (event.isComposing || event.keyCode === 229) return; if (event.key === "Enter") void commit(); }); window.setTimeout(() => title.focus(), 0); }
     localizeElement(contentEl);
   }
 }
@@ -212,13 +224,13 @@ class SetupModal extends Modal {
     ];
     const inputs = new Map(); fields.forEach(([label, key, value]) => { const row = form.createEl("label"); row.createSpan({ text: label }); const input = row.createEl("input", { type: "text", value, placeholder: key.includes("Folder") ? "相对 vault 的目录路径" : "frontmatter 字段名" }); inputs.set(key, input); });
     const actions = contentEl.createDiv({ cls: "pvd-modal-actions" }); const save = actions.createEl("button", { text: "保存配置", cls: "mod-cta" });
-    save.addEventListener("click", async () => { const taskFolder = inputs.get("taskFolder").value.trim().replace(/^\.\//, "").replace(/\/$/, ""); if (!taskFolder) { showNotice("请选择任务目录。"); return; } const nextSchema = Object.assign({}, schema); ["typeField", "typeValue", "statusField", "planField", "projectField", "priorityField"].forEach(key => nextSchema[key] = inputs.get(key).value.trim() || schema[key]); ["inboxFolder", "literatureFolder", "permanentFolder", "taskFolder", "projectFolder"].forEach(key => this.plugin.settings[key] = inputs.get(key).value.trim().replace(/^\.\//, "").replace(/\/$/, "")); this.plugin.settings.schema = nextSchema; await this.plugin.saveSettings(); this.close(); showNotice("Omni Workbench 配置已保存。"); });
+    save.addEventListener("click", async () => { const taskFolder = normalizeVaultPath(inputs.get("taskFolder").value); if (!taskFolder) { showNotice("请选择任务目录。"); return; } const nextSchema = Object.assign({}, schema); ["typeField", "typeValue", "statusField", "planField", "projectField", "priorityField"].forEach(key => nextSchema[key] = inputs.get(key).value.trim() || schema[key]); ["inboxFolder", "literatureFolder", "permanentFolder", "taskFolder", "projectFolder"].forEach(key => this.plugin.settings[key] = normalizeVaultPath(inputs.get(key).value)); this.plugin.settings.schema = nextSchema; await this.plugin.saveSettings(); this.close(); showNotice("Omni Workbench 配置已保存。"); });
     localizeElement(contentEl);
   }
 }
 
 class FocusWorkbenchView extends ItemView {
-  constructor(leaf, plugin) { super(leaf); this.plugin = plugin; this.tab = "home"; this.taskView = "today"; this.taskVisualMode = "calendar"; this.taskVisualProject = ""; this.taskVisualPriority = ""; this.taskVisualStatus = "all"; this.timelineDays = 14; this.taskFilter = "active"; this.completedExpanded = false; this.focusPath = ""; this.taskSearch = ""; this.knowledgeFilter = "all"; this.knowledgeSearch = ""; this.calendarMonth = this.monthStart(new Date()); }
+  constructor(leaf, plugin) { super(leaf); this.plugin = plugin; this.tab = "home"; this.taskView = "today"; this.taskVisualMode = "calendar"; this.taskVisualProject = ""; this.taskVisualPriority = ""; this.taskVisualStatus = "all"; this.timelineDays = 14; this.taskFilter = "active"; this.completedExpanded = false; this.ideaOverdueCollapsed = false; this.ideaPendingCollapsed = false; this.focusPath = ""; this.taskSearch = ""; this.knowledgeFilter = "all"; this.knowledgeSearch = ""; this.calendarMonth = this.monthStart(new Date()); }
   getViewType() { return VIEW_TYPE; }
   getDisplayText() { return "Omni Workbench"; }
   getIcon() { return "layout-dashboard"; }
@@ -265,7 +277,7 @@ class FocusWorkbenchView extends ItemView {
   config() {
     const file = this.app.vault.getAbstractFileByPath("知识库配置.md");
     const fm = file ? this.app.metadataCache.getFileCache(file)?.frontmatter || {} : {};
-    const path = (key, fallback) => String(fm[key] || fallback).replace(/^\.\//, "").replace(/\/$/, "");
+    const path = (key, fallback) => normalizeVaultPath(fm[key] || fallback);
     const goals = path("goals_folder", "目标与任务");
     const configured = this.plugin.settings;
     return { inbox: configured.inboxFolder || path("inbox_folder", "闪念笔记"), permanent: configured.permanentFolder || path("permanent_folder", "永久笔记"), literature: configured.literatureFolder || path("literature_folder", "文献笔记"), goals, task: configured.taskFolder || path("task_folder", `${goals}/任务管理/任务`), project: configured.projectFolder || path("project_folder", `${goals}/任务管理/项目`), taskBase: configured.taskBasePath };
@@ -442,7 +454,7 @@ class FocusWorkbenchView extends ItemView {
     const header = shell.createEl("header", { cls: "pvd-header" });
     const title = header.createDiv();
     title.createEl("p", { text: "PERSONAL WORKSPACE" });
-    title.createEl("h1", { text: this.tab === "home" ? "今天，做重要的事。" : this.tab === "tasks" ? "任务指挥舱" : "闪念处理与知识流" });
+    title.createEl("h1", { text: this.tab === "home" ? "今天，做重要的事。" : this.tab === "tasks" ? "任务指挥舱" : "知识卡片笔记流程" });
     title.createSpan({ text: this.dateKey() });
     const nav = header.createDiv({ cls: "pvd-tabs" });
     this.button(nav, "首页", async () => { this.tab = "home"; await this.render(); }, this.tab === "home" ? "is-active" : "");
@@ -477,7 +489,7 @@ class FocusWorkbenchView extends ItemView {
     const quick = shell.createDiv({ cls: "pvd-quick" });
     this.button(quick, "记录灵感", () => this.createIdea());
     this.button(quick, "新建任务", () => this.createTask());
-    this.button(quick, "处理闪念", async () => { this.tab = "knowledge"; await this.render(); });
+    this.button(quick, "知识卡片流程", async () => { this.tab = "knowledge"; await this.render(); });
     const inbox = this.pendingIdeas().sort((a, b) => this.ideaCapturedAt(a) - this.ideaCapturedAt(b)).slice(0, 5);
     const inboxCard = shell.createEl("section", { cls: "pvd-card pvd-inbox" });
     const inboxHead = inboxCard.createDiv({ cls: "pvd-section-head" });
@@ -544,7 +556,7 @@ class FocusWorkbenchView extends ItemView {
     const settled = this.knowledgeGroups().filter(group => group.key !== "fleeting").reduce((total, group) => total + this.knowledgeNotes(group).length, 0);
     const desk = shell.createEl("section", { cls: "pvd-card pvd-idea-desk" });
     const head = desk.createDiv({ cls: "pvd-idea-desk-head" });
-    const copy = head.createDiv(); copy.createEl("p", { text: "CARD NOTE FLOW" }); copy.createEl("h2", { text: "从行动到知识" }); copy.createEl("span", { text: "任务旁捕捉闪念，七天内补清上下文，再沉淀为永久笔记、归档为文献笔记，或明确舍弃。" });
+    const copy = head.createDiv(); copy.createEl("p", { text: "CARD NOTE FLOW" }); copy.createEl("h2", { text: "知识卡片笔记流程" }); copy.createEl("span", { text: "任务旁捕捉闪念，七天内补清上下文，再沉淀为永久笔记、归档为文献笔记，或明确舍弃。" });
     const summary = head.createDiv({ cls: "pvd-idea-summary", attr: { "aria-label": `待处理 ${pending.length} 条，今日到期 ${dueToday.length} 条，逾期 ${overdue.length} 条，已沉淀 ${settled} 篇` } });
     const total = summary.createDiv(); total.createEl("strong", { text: String(pending.length) }); total.createSpan({ text: "待处理" });
     const due = summary.createDiv({ cls: dueToday.length ? "is-due" : "" }); due.createEl("strong", { text: String(dueToday.length) }); due.createSpan({ text: "今日到期" });
@@ -560,12 +572,20 @@ class FocusWorkbenchView extends ItemView {
       const outcome = outcomes.createDiv({ cls: `pvd-idea-outcome is-${kind}` }); outcome.createEl("strong", { text: name }); outcome.createSpan({ text: description });
     });
     const queues = desk.createDiv({ cls: "pvd-idea-queues" });
-    this.renderIdeaQueue(queues, "超过 7 天 · 优先处理", "这些闪念已经超过暂存周期，请先做去留判断", overdue, true);
-    this.renderIdeaQueue(queues, "七天处理期", "按最早捕捉顺序整理；第七天必须完成分流", current, false);
+    this.renderIdeaQueue(queues, "待处理", "按最早捕捉顺序整理；第七天必须完成分流", current, false, this.ideaPendingCollapsed, () => { this.ideaPendingCollapsed = !this.ideaPendingCollapsed; void this.render(); });
+    this.renderIdeaQueue(queues, "过期闪念", "这些闪念已经超过暂存周期，请先做去留判断", overdue, true, this.ideaOverdueCollapsed, () => { this.ideaOverdueCollapsed = !this.ideaOverdueCollapsed; void this.render(); });
   }
-  renderIdeaQueue(parent, title, description, files, overdue) {
-    const queue = parent.createEl("section", { cls: `pvd-idea-queue ${overdue ? "is-overdue" : ""}` });
-    const head = queue.createDiv({ cls: "pvd-idea-queue-head" }); const copy = head.createDiv(); copy.createEl("h3", { text: title }); copy.createEl("p", { text: description }); head.createEl("strong", { text: String(files.length), attr: { "aria-label": `${files.length} 条` } });
+  renderIdeaQueue(parent, title, description, files, overdue, collapsed, toggle) {
+    const queue = parent.createEl("section", { cls: `pvd-idea-queue ${overdue ? "is-overdue" : ""} ${collapsed ? "is-collapsed" : ""}` });
+    const head = queue.createDiv({ cls: "pvd-idea-queue-head", attr: { role: "button", tabindex: "0", "aria-expanded": String(!collapsed) } });
+    const copy = head.createDiv(); copy.createEl("h3", { text: title }); copy.createEl("p", { text: description });
+    const meta = head.createDiv({ cls: "pvd-idea-queue-head-meta" });
+    meta.createEl("strong", { cls: "pvd-idea-queue-count", text: String(files.length), attr: { "aria-label": `${files.length} 条` } });
+    const chevron = meta.createSpan({ cls: "pvd-idea-queue-chevron", attr: { "aria-hidden": "true" } });
+    chevron.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+    head.addEventListener("click", toggle);
+    head.addEventListener("keydown", event => { if ((event.key === "Enter" || event.key === " ") && !event.shiftKey) { event.preventDefault(); toggle(); } });
+    if (collapsed) return;
     const list = queue.createDiv({ cls: "pvd-triage-list" });
     if (!files.length) { const empty = list.createDiv({ cls: "pvd-triage-empty" }); empty.createEl("strong", { text: overdue ? "没有逾期闪念" : "本周收件箱已清空" }); empty.createSpan({ text: overdue ? "很好，继续保持每周分流。" : "记录新想法后，它会出现在这里。" }); return; }
     files.forEach(file => this.renderIdeaTriageCard(list, file, overdue));
@@ -574,7 +594,7 @@ class FocusWorkbenchView extends ItemView {
     const age = this.ideaAgeDays(file); const linkedTask = this.ideaLinkedTask(file);
     const card = parent.createEl("article", { cls: `pvd-triage-card ${overdue ? "is-overdue" : age === 7 ? "is-due" : ""}` });
     const copy = card.createDiv({ cls: "pvd-triage-copy" });
-    const eyebrow = copy.createDiv({ cls: "pvd-triage-meta" }); eyebrow.createSpan({ text: overdue ? "已逾期 · 立即判断" : age === 7 ? "今天必须分流" : "七天处理期" }); eyebrow.createSpan({ text: this.ideaTimeLabel(file) });
+    const eyebrow = copy.createDiv({ cls: "pvd-triage-meta" }); eyebrow.createSpan({ text: overdue ? "已逾期 · 立即判断" : age === 7 ? "今天必须分流" : "待处理" }); eyebrow.createSpan({ text: this.ideaTimeLabel(file) });
     if (linkedTask) eyebrow.createSpan({ cls: "is-linked", text: `来自任务 · ${linkedTask.basename}` });
     copy.createEl("h4", { text: this.ideaTitle(file) });
     const tags = Array.isArray(this.meta(file).tags) ? this.meta(file).tags.slice(0, 3).map(tag => `#${tag}`).join(" ") : "";
@@ -870,7 +890,21 @@ class FocusWorkbenchView extends ItemView {
     showNotice(target.notice); await this.render();
   }
   discardIdea(file) { new ConfirmModal(this.app, "舍弃闪念", `将“${this.ideaTitle(file)}”移入 Obsidian 回收站，并清理任务中的关联？`, "舍弃", async () => { const linkedTask = this.ideaLinkedTask(file); await this.replaceTaskIdeaLink(linkedTask, file.path); await this.app.fileManager.trashFile(file); showNotice("闪念已移入回收站，任务关联已清理"); await this.render(); }).open(); }
-  async createTask() { new TextPromptModal(this.app, "新建任务", "任务标题", async title => { const dir = this.config().task; await this.ensureFolder(dir); const file = await this.app.vault.create(this.uniqueTaskPath(dir, title), await this.newTaskContent(title)); await this.openFile(file); await this.render(); }, title => this.validateNoteTitle(title)).open(); }
+  async createTask() {
+    const defaults = { project: "", priority: "P2", status: "待做", plan: this.dateKey(), estimate: "" };
+    new TaskEditorModal(this.app, { basename: "新任务" }, defaults, this.projectOptions(), async values => {
+      const dir = this.config().task; await this.ensureFolder(dir);
+      const file = await this.app.vault.create(this.uniqueTaskPath(dir, values.title), await this.newTaskContent(values.title));
+      await this.app.fileManager.processFrontMatter(file, next => {
+        this.setTaskProperty(next, "projectField", values.project ? `[[${values.project}]]` : "");
+        this.setTaskProperty(next, "priorityField", values.priority);
+        this.setTaskProperty(next, "planField", values.plan);
+        this.setTaskProperty(next, "expectedField", values.estimate ? Number(values.estimate) : "");
+      });
+      if (values.status !== "待做") await this.transitionTask(file, values.status);
+      showNotice("任务已创建"); await this.render();
+    }, [], { mode: "create", heading: "新建任务", lead: "填写任务属性并保存，任务会写入任务目录，不会离开当前工作台。", submitLabel: "创建任务", validateTitle: title => this.validateNoteTitle(title) }).open();
+  }
   escapeRegExp(text) { return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
   setFrontmatterField(source, field, value) {
     const pattern = new RegExp(`^(${this.escapeRegExp(field)}\\s*:).*$`, "m");
@@ -955,6 +989,8 @@ function unifiedTaskBase() {
 function starterTaskTemplate(schema) {
   return `---\n${schema.typeField}: ${schema.typeValue}\n${schema.projectField}: ""\n${schema.statusField}: 待做\n${schema.priorityField}: P2\n${schema.planField}: \n${schema.expectedField}: \n${schema.timerStateField}: 未开始\n${schema.timerStartedField}: \n${schema.elapsedField}: 0\n${schema.doneField}: false\n${schema.completedAtField}: \n创建日期: \n---\n\n# 新任务\n\n## 完成标准\n\n- [ ] \n`;
 }
+
+function normalizeVaultPath(value) { return normalizePath(String(value || "").trim()).replace(/\/$/, ""); }
 
 async function ensureVaultFolder(vault, folder) {
   let current = "";
@@ -1059,24 +1095,24 @@ class FocusWorkbenchSettingTab extends PluginSettingTab {
       head.createEl("strong", { text: name }); head.createSpan({ text: stage });
       card.createEl("p", { text: description });
       card.createEl("small", { text: example });
-      new Setting(card).setName("保存位置").setDesc(folderExists(value(key)) ? "目录已存在" : "初始化时会自动创建").addText(text => text.setValue(value(key)).setPlaceholder(defaults[key]).onChange(async next => { settings[key] = next.trim().replace(/^\.\//, "").replace(/\/$/, ""); await this.plugin.saveSettings(); }));
+      new Setting(card).setName("保存位置").setDesc(folderExists(value(key)) ? "目录已存在" : "初始化时会自动创建").addText(text => text.setValue(value(key)).setPlaceholder(defaults[key]).onChange(async next => { settings[key] = normalizeVaultPath(next); await this.plugin.saveSettings(); }));
     });
 
     new Setting(containerEl).setName("第 2 步：确认任务如何保存").setDesc("任务目录是插件读取任务的来源；项目目录用于任务编辑器的项目选项。").setHeading();
     const taskSection = containerEl.createDiv({ cls: "pvd-settings-section" });
-    new Setting(taskSection).setName("任务目录").setDesc("新建任务保存在这里，插件也只从这里读取符合字段规则的任务。").addText(text => text.setValue(value("taskFolder")).setPlaceholder(defaults.taskFolder).onChange(async next => { settings.taskFolder = next.trim().replace(/^\.\//, "").replace(/\/$/, ""); await this.plugin.saveSettings(); }));
-    new Setting(taskSection).setName("项目目录").setDesc("此目录中的笔记会出现在任务的“所属项目”下拉菜单中。").addText(text => text.setValue(value("projectFolder")).setPlaceholder(defaults.projectFolder).onChange(async next => { settings.projectFolder = next.trim().replace(/^\.\//, "").replace(/\/$/, ""); await this.plugin.saveSettings(); }));
+    new Setting(taskSection).setName("任务目录").setDesc("新建任务保存在这里，插件也只从这里读取符合字段规则的任务。").addText(text => text.setValue(value("taskFolder")).setPlaceholder(defaults.taskFolder).onChange(async next => { settings.taskFolder = normalizeVaultPath(next); await this.plugin.saveSettings(); }));
+    new Setting(taskSection).setName("项目目录").setDesc("此目录中的笔记会出现在任务的“所属项目”下拉菜单中。").addText(text => text.setValue(value("projectFolder")).setPlaceholder(defaults.projectFolder).onChange(async next => { settings.projectFolder = normalizeVaultPath(next); await this.plugin.saveSettings(); }));
 
     new Setting(containerEl).setName("第 3 步：理解模板和任务总表").setDesc("模板决定新任务笔记的内容；任务总表只是额外的表格视图，两者用途不同。").setHeading();
     const assets = containerEl.createDiv({ cls: "pvd-settings-assets" });
     const templateCard = assets.createDiv({ cls: "pvd-settings-asset-card" });
     templateCard.createEl("strong", { text: "任务模板 · 决定新任务长什么样" });
     templateCard.createEl("p", { text: "每次在工作台点击“新建任务”时使用。插件会自动写入计划日期、创建日期和任务标题。模板不存在时仍可使用内置格式。" });
-    new Setting(templateCard).setName(templateReady ? "模板已找到" : "等待初始化").setDesc(value("taskTemplatePath")).addText(text => text.setValue(value("taskTemplatePath")).setPlaceholder(defaults.taskTemplatePath).onChange(async next => { settings.taskTemplatePath = next.trim().replace(/^\.\//, ""); await this.plugin.saveSettings(); }));
+    new Setting(templateCard).setName(templateReady ? "模板已找到" : "等待初始化").setDesc(value("taskTemplatePath")).addText(text => text.setValue(value("taskTemplatePath")).setPlaceholder(defaults.taskTemplatePath).onChange(async next => { settings.taskTemplatePath = normalizeVaultPath(next); await this.plugin.saveSettings(); }));
     const baseCard = assets.createDiv({ cls: "pvd-settings-asset-card" });
     baseCard.createEl("strong", { text: "任务总表 · 用表格浏览同一批任务" });
     baseCard.createEl("p", { text: "这是可选的 Obsidian Bases 视图，提供“全部、今日、进行中、已完成”表格。它不会决定插件读取哪些任务。" });
-    new Setting(baseCard).setName(baseReady ? "任务总表已找到" : "等待初始化").setDesc(value("taskBasePath")).addText(text => text.setValue(value("taskBasePath")).setPlaceholder(defaults.taskBasePath).onChange(async next => { settings.taskBasePath = next.trim().replace(/^\.\//, ""); await this.plugin.saveSettings(); }));
+    new Setting(baseCard).setName(baseReady ? "任务总表已找到" : "等待初始化").setDesc(value("taskBasePath")).addText(text => text.setValue(value("taskBasePath")).setPlaceholder(defaults.taskBasePath).onChange(async next => { settings.taskBasePath = normalizeVaultPath(next); await this.plugin.saveSettings(); }));
 
     new Setting(containerEl).setName("已有仓库或自定义字段").setDesc("如果你已经有自己的目录和 frontmatter 字段，再使用高级映射；全新用户可以跳过。").setHeading();
     new Setting(containerEl).setName("连接现有仓库").setDesc("映射已有任务、项目、三类知识目录与字段名称。不会移动或修改任何已有笔记。").addButton(button => button.setButtonText("打开高级映射").onClick(() => new SetupModal(this.app, this.plugin).open()));
