@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.10
+
+### Added
+
+- The "全部任务" and "今日任务" views now support multi-select batch editing: each task card has a checkbox in its top-right corner, and Ctrl/Cmd+click toggles selection. A selection toolbar appears for select-all, batch-edit, and clear-selection.
+
+### Changed
+
+- "全部任务" and "今日任务" task cards now expose a selection checkbox in the top-right corner alongside the existing focus and edit affordances.
+- Right-clicking a task card opens single-task editing when one task is selected, and the multi-select batch editor when more than one is selected.
+
 ## 0.3.9
 
 ### Added

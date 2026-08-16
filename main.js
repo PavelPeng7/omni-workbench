@@ -70,6 +70,7 @@ const UI_TEXT_EN = {
   "请选择任务目录。": "Choose a task folder.", "Omni Workbench 配置已保存。": "Omni Workbench configuration saved.", "已创建关联闪念，并写入双向链接": "Linked idea created with backlinks.", "闪念笔记已更新": "Idea note updated.", "已从闪念创建任务，并保留双向来源": "Task created from the idea with bidirectional source links.", "已转为文献笔记": "Converted to a literature note.", "已转为永久笔记": "Converted to a permanent note.", "闪念已移入回收站，任务关联已清理": "Idea moved to the trash and task links removed.", "任务已更新": "Task updated.", "任务已移入回收站": "Task moved to the trash.", "已暂停专注": "Focus paused.", "已开始专注": "Focus started.", "任务已完成": "Task completed.",
   "请输入标题。": "Enter a title.", "标题过长，请控制在 120 个字符以内。": "Keep the title within 120 characters.", "标题不能包含 \\ / : * ? \" < > | 或路径片段。": "The title cannot contain \\ / : * ? \" < > | or path segments.", "标题不能以句点或空格结尾。": "The title cannot end with a period or space.", "该标题是 Windows 保留文件名。": "This title is a reserved Windows filename.",
   "任务模板路径必须以 .md 结尾。": "The task template path must end in .md.", "任务总表路径必须以 .base 结尾。": "The task table path must end in .base.", "任务模板路径当前是一个文件夹，请换一个 .md 文件路径。": "The task template path points to a folder. Choose an .md file path.", "任务总表路径当前是一个文件夹，请换一个 .base 文件路径。": "The task table path points to a folder. Choose a .base file path.", "推荐工作区已准备好，可以打开 Omni Workbench 开始使用。": "The recommended workspace is ready. Open Omni Workbench to get started."
+  , "项任务": "tasks", "已选择": "Selected", "全选": "Select all", "取消全选": "Clear all", "批量编辑": "Batch edit", "清除选择": "Clear selection", "批量编辑任务": "Batch edit tasks", "保持原样": "Keep as is", "应用到所选任务": "Apply to selected tasks", "请先勾选要编辑的任务。": "Select tasks to edit first.", "左键聚焦 · Ctrl/Cmd 多选 · 右键编辑": "Click to focus · Ctrl/Cmd to multi-select · Right-click to edit"
 };
 
 const UI_DYNAMIC_EN = [
@@ -85,6 +86,7 @@ const UI_DYNAMIC_EN = [
   , [/^“(.+)”已超过预计耗时，继续计时中。$/, "“$1” is over its estimate and is still timing."]
   , [/^无法打开：(.+)$/, "Unable to open: $1"], [/^将“(.+)”移入 Obsidian 回收站？$/, "Move “$1” to the Obsidian trash?"]
   , [/^将“(.+)”移入 Obsidian 回收站，并清理任务中的关联？$/, "Move “$1” to the Obsidian trash and remove its task links?"]
+  , [/^已选择 (\d+) 项任务；.*$/, "Selected $1 tasks; only the fields you change are updated."], [/^已选择 (\d+) 项任务$/, "Selected $1 tasks"], [/^已更新 (\d+) 项任务$/, "Updated $1 tasks"], [/^选择任务：(.+)$/, "Select task: $1"]
 ];
 
 let ACTIVE_LANGUAGE = DEFAULT_SETTINGS.language;
@@ -210,6 +212,43 @@ class IdeaEditorModal extends Modal {
   }
 }
 
+class BatchTaskEditorModal extends Modal {
+  constructor(app, files, projects, submit) { super(app); this.files = files; this.projects = projects; this.submit = submit; }
+  onOpen() {
+    const { contentEl } = this; this.modalEl.addClass("pvd-modal-shell"); contentEl.addClass("pvd-modal");
+    contentEl.createEl("h2", { text: "批量编辑任务" });
+    contentEl.createEl("p", { cls: "pvd-modal-lead", text: `已选择 ${this.files.length} 项任务；只更新你修改的字段，未修改的字段保持原样。` });
+    const form = contentEl.createDiv({ cls: "pvd-task-editor" });
+    const field = (label, element) => { const row = form.createEl("label"); row.createSpan({ text: label }); row.appendChild(element); return element; };
+    const project = field("所属项目", document.createElement("select"));
+    project.createEl("option", { text: "保持原样", value: "" });
+    const options = [...new Set(this.projects.filter(Boolean))].sort((a, b) => a.localeCompare(b, "zh-CN"));
+    options.forEach(name => project.createEl("option", { text: name, value: name }));
+    const priority = field("优先级", document.createElement("select"));
+    priority.createEl("option", { text: "保持原样", value: "" });
+    ["P0", "P1", "P2"].forEach(value => priority.createEl("option", { text: value, value }));
+    const status = field("任务状态", document.createElement("select"));
+    status.createEl("option", { text: "保持原样", value: "保持" });
+    ["待做", "进行中", "暂停", "完成"].forEach(value => status.createEl("option", { text: value, value }));
+    const date = field("计划日期", document.createElement("input")); date.type = "date"; date.value = "";
+    const actions = contentEl.createDiv({ cls: "pvd-modal-actions" });
+    const cancel = actions.createEl("button", { text: "取消" });
+    const save = actions.createEl("button", { text: "应用到所选任务", cls: "mod-cta" });
+    cancel.addEventListener("click", () => this.close());
+    save.addEventListener("click", async () => {
+      const values = {
+        project: project.value ? project.value.trim() : undefined,
+        priority: priority.value || undefined,
+        status: status.value || undefined,
+        plan: date.value.trim() || undefined
+      };
+      await this.submit(values); this.close();
+    });
+    localizeElement(contentEl);
+    window.setTimeout(() => project.focus(), 0);
+  }
+}
+
 class SetupModal extends Modal {
   constructor(app, plugin) { super(app); this.plugin = plugin; }
   onOpen() {
@@ -230,7 +269,7 @@ class SetupModal extends Modal {
 }
 
 class FocusWorkbenchView extends ItemView {
-  constructor(leaf, plugin) { super(leaf); this.plugin = plugin; this.tab = "home"; this.taskView = "today"; this.taskVisualMode = "calendar"; this.taskVisualProject = ""; this.taskVisualPriority = ""; this.taskVisualStatus = "all"; this.timelineDays = 14; this.taskFilter = "active"; this.completedExpanded = false; this.ideaOverdueCollapsed = false; this.ideaPendingCollapsed = false; this.focusPath = ""; this.taskSearch = ""; this.knowledgeFilter = "all"; this.knowledgeSearch = ""; this.calendarMonth = this.monthStart(new Date()); }
+  constructor(leaf, plugin) { super(leaf); this.plugin = plugin; this.tab = "home"; this.taskView = "today"; this.taskVisualMode = "calendar"; this.taskVisualProject = ""; this.taskVisualPriority = ""; this.taskVisualStatus = "all"; this.timelineDays = 14; this.taskFilter = "active"; this.completedExpanded = false; this.ideaOverdueCollapsed = false; this.ideaPendingCollapsed = false; this.focusPath = ""; this.taskSearch = ""; this.selectedTasks = new Set(); this.knowledgeFilter = "all"; this.knowledgeSearch = ""; this.calendarMonth = this.monthStart(new Date()); }
   getViewType() { return VIEW_TYPE; }
   getDisplayText() { return "Omni Workbench"; }
   getIcon() { return "layout-dashboard"; }
@@ -773,18 +812,20 @@ class FocusWorkbenchView extends ItemView {
     if (this.taskView === "all") {
       const controls = main.createEl("section", { cls: "pvd-card pvd-task-controls" }); const toolbar = controls.createDiv({ cls: "pvd-task-toolbar" });
       const search = toolbar.createEl("input", { cls: "pvd-task-search", type: "search", placeholder: "搜索任务、项目或优先级…", value: this.taskSearch, attr: { "aria-label": "搜索任务" } });
-      search.addEventListener("input", event => { this.taskSearch = event.target.value; void this.renderTasksResults(this.taskResultsEl, filters, tasks, today, this.taskFilter, true); });
+      search.addEventListener("input", event => { this.taskSearch = event.target.value; void this.renderTasksResults(this.taskResultsEl, filters, tasks, today, this.taskFilter, true, true).then(() => this.renderSelectionToolbar()); });
       this.button(toolbar, "＋ 新建任务", () => this.createTask(), "mod-cta");
       const filterBar = controls.createDiv({ cls: "pvd-filter" }); Object.entries(filters).forEach(([key, label]) => this.button(filterBar, label, () => { this.taskFilter = key; void this.render(); }, this.taskFilter === key ? "is-active" : ""));
-      const results = main.createDiv({ cls: "pvd-task-results" }); this.taskResultsEl = results; await this.renderTasksResults(results, filters, tasks, today, this.taskFilter, true); return;
+      this.createSelectionToolbar(main);
+      const results = main.createDiv({ cls: "pvd-task-results" }); this.taskResultsEl = results; await this.renderTasksResults(results, filters, tasks, today, this.taskFilter, true, true); return;
     }
     const todayActions = main.createEl("section", { cls: "pvd-today-actions" });
     const todayActionCopy = todayActions.createDiv({ cls: "pvd-today-actions-copy" });
     todayActionCopy.createEl("strong", { text: "今天要推进什么？" });
     todayActionCopy.createSpan({ text: todayCount ? `当前有 ${todayCount} 项今日任务` : "创建一项任务，开始安排今天" });
     this.button(todayActions, "＋ 新建任务", () => this.createTask(), "mod-cta");
+    this.createSelectionToolbar(main);
     const todayResults = main.createDiv({ cls: "pvd-task-results pvd-today-results" });
-    await this.renderTasksResults(todayResults, filters, tasks, today, "today", false);
+    await this.renderTasksResults(todayResults, filters, tasks, today, "today", false, true);
   }
 
   matchesTaskSearch(file) {
@@ -800,7 +841,22 @@ class FocusWorkbenchView extends ItemView {
     toggle.setAttribute("aria-expanded", String(this.completedExpanded));
     if (this.completedExpanded) { const list = section.createDiv({ cls: "pvd-completed-list" }); completed.forEach(file => this.renderTaskCard(list, file)); }
   }
-  async renderTasksResults(parent, filters, suppliedTasks, suppliedToday, filterKey = this.taskFilter, showCompleted = false) {
+  createSelectionToolbar(main) {
+    const selectToolbar = main.createDiv({ cls: "pvd-selection-toolbar is-hidden", attr: { "data-pvd-selection-toolbar": "" } });
+    const selectCopy = selectToolbar.createDiv({ cls: "pvd-selection-copy" });
+    selectCopy.createEl("strong", { text: "已选择", attr: { "data-pvd-selection-count": "0" } });
+    selectCopy.createEl("span", { text: "项任务" });
+    const selectActions = selectToolbar.createDiv({ cls: "pvd-selection-actions" });
+    const selectAllButton = this.button(selectActions, "全选", () => this.toggleSelectAll(), "pvd-selection-all");
+    selectAllButton.setAttribute("data-pvd-selection-all", "");
+    const editButton = this.button(selectActions, "批量编辑", () => this.openBatchEditor(), "mod-cta pvd-selection-edit");
+    editButton.setAttribute("data-pvd-selection-edit", "");
+    const clearButton = this.button(selectActions, "清除选择", () => this.clearSelectionAndRender(), "pvd-selection-clear");
+    clearButton.setAttribute("data-pvd-selection-clear", "");
+    return selectToolbar;
+  }
+
+  async renderTasksResults(parent, filters, suppliedTasks, suppliedToday, filterKey = this.taskFilter, showCompleted = false, selectable = false) {
     const tasks = suppliedTasks || this.tasks(); const today = suppliedToday || this.today();
     parent.empty();
     const filtered = tasks.filter(file => {
@@ -808,22 +864,88 @@ class FocusWorkbenchView extends ItemView {
       if (filterKey === "active") return !this.taskDone(file); if (filterKey === "doing") return !this.taskDone(file) && this.taskStatus(file) === "进行中";
       return !this.taskDone(file) && this.isPastCalendarDay(this.taskPlanKey(file), today);
     }).filter(file => this.matchesTaskSearch(file)).sort((a, b) => this.compareTasks(a, b));
+    if (selectable) this.visibleSelectableTasks = filtered;
     const board = parent.createEl("section", { cls: "pvd-card pvd-board" }); board.createEl("h2", { text: `${filters[filterKey]} · ${filtered.length} 项` });
     if (!filtered.length) board.createEl("p", { text: "这里还没有任务。" });
-    filtered.forEach(file => this.renderTaskCard(board, file));
+    filtered.forEach(file => this.renderTaskCard(board, file, selectable));
     if (showCompleted) this.renderCompletedTasks(parent, tasks);
     localizeElement(parent, this.plugin.settings.language);
   }
 
-  renderTaskCard(parent, file) {
-    const card = parent.createDiv({ cls: `pvd-task ${this.taskDone(file) ? "is-done" : ""} ${this.focusPath === file.path ? "is-focus" : ""}` });
+  isTaskSelected(file) { return this.selectedTasks.has(file.path); }
+  toggleTaskSelection(file) { if (this.selectedTasks.has(file.path)) this.selectedTasks.delete(file.path); else this.selectedTasks.add(file.path); }
+  clearTaskSelection() { this.selectedTasks.clear(); }
+  selectedTaskFiles(tasks = this.tasks()) { return tasks.filter(file => this.selectedTasks.has(file.path)); }
+  selectAllVisibleTasks(tasks) { tasks.forEach(file => this.selectedTasks.add(file.path)); }
+  areAllVisibleSelected() {
+    const visible = this.visibleSelectableTasks || [];
+    return visible.length > 0 && visible.every(file => this.selectedTasks.has(file.path));
+  }
+
+  toggleSelectAll() {
+    const visible = this.visibleSelectableTasks || [];
+    if (this.areAllVisibleSelected()) visible.forEach(file => this.selectedTasks.delete(file.path));
+    else visible.forEach(file => this.selectedTasks.add(file.path));
+    void this.renderSelectionToolbar();
+  }
+
+  clearSelectionAndRender() {
+    this.clearTaskSelection();
+    this.syncSelectionUi();
+    void this.renderSelectionToolbar();
+  }
+
+  openBatchEditor() {
+    const files = this.selectedTaskFiles();
+    if (!files.length) { showNotice("请先勾选要编辑的任务。"); return; }
+    new BatchTaskEditorModal(this.app, files, this.projectOptions(), values => this.applyBatchEdit(files, values)).open();
+  }
+
+  async applyBatchEdit(files, values) {
+    let updated = 0;
+    for (const file of files) {
+      await this.app.fileManager.processFrontMatter(file, next => {
+        if (values.project !== undefined) this.setTaskProperty(next, "projectField", values.project ? `[[${values.project}]]` : "");
+        if (values.priority) this.setTaskProperty(next, "priorityField", values.priority);
+        if (values.plan) this.setTaskProperty(next, "planField", values.plan);
+      });
+      if (values.status && values.status !== "保持") await this.transitionTask(file, values.status);
+      updated++;
+    }
+    showNotice(`已更新 ${updated} 项任务`);
+    this.clearTaskSelection();
+    await this.render();
+  }
+
+
+  renderTaskCard(parent, file, selectable = false) {
+    const card = parent.createDiv({ cls: `pvd-task ${this.taskDone(file) ? "is-done" : ""} ${this.focusPath === file.path ? "is-focus" : ""} ${selectable ? "has-selector" : ""} ${selectable && this.isTaskSelected(file) ? "is-selected" : ""}` });
+    if (selectable) card.setAttribute("data-task-path", file.path);
     if (this.focusPath === file.path) card.setAttribute("aria-current", "true");
-    this.bindTaskFocusAndEdit(card, file, `任务：${file.basename}`);
     const stop = action => async event => { event.stopPropagation(); await action(); };
     const main = card.createDiv(); main.createEl("strong", { text: file.basename });
     const project = String(this.taskProperty(file, "projectField") || "未关联项目").replace(/^\[\[|\]\]$/g, "");
     main.createSpan({ text: `${project} · ${this.taskPlan(file) ? this.dateKey(this.taskPlan(file)) : "未安排日期"}` }); this.timer(main, file);
     const side = card.createDiv({ cls: "pvd-task-card-side" });
+    if (selectable) {
+      const check = side.createEl("button", { cls: "pvd-task-check", attr: { type: "button", role: "checkbox", "aria-checked": String(this.isTaskSelected(file)), "aria-label": `选择任务：${file.basename}`, tabindex: "0" } });
+      check.addEventListener("click", event => { event.stopPropagation(); this.toggleTaskSelection(file); this.renderSelectionState(check, file); void this.renderSelectionToolbar(); });
+      card.addEventListener("click", event => {
+        if (event.target.closest?.("button")) return;
+        if (event.ctrlKey || event.metaKey) { event.preventDefault(); event.stopPropagation(); this.toggleTaskSelection(file); this.renderSelectionState(check, file); void this.renderSelectionToolbar(); return; }
+        void this.setFocus(file);
+      });
+      card.addEventListener("keydown", event => {
+        if (event.target.closest?.("button")) return;
+        if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); if (this.selectedTaskFiles().length > 1) this.openBatchEditor(); else this.editTask(file); return; }
+        if ((event.ctrlKey || event.metaKey) && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); event.stopPropagation(); this.toggleTaskSelection(file); this.renderSelectionState(check, file); void this.renderSelectionToolbar(); }
+        else if (!event.shiftKey && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); void this.setFocus(file); }
+      });
+      card.addEventListener("contextmenu", event => { event.preventDefault(); event.stopPropagation(); if (this.selectedTaskFiles().length > 1) this.openBatchEditor(); else this.editTask(file); });
+      card.setAttribute("aria-label", `任务：${file.basename}；左键聚焦，Ctrl/Cmd+左键多选，右键编辑`);
+    } else {
+      this.bindTaskFocusAndEdit(card, file, `任务：${file.basename}`);
+    }
     const badges = side.createDiv({ cls: "pvd-badges" }); badges.createSpan({ text: this.priority(file) }); badges.createSpan({ text: this.taskStatus(file) });
     const quick = side.createDiv({ cls: "pvd-task-card-quick" });
     const open = this.button(quick, "打开文档 ↗", stop(() => this.openFile(file)), "pvd-task-open");
@@ -831,7 +953,42 @@ class FocusWorkbenchView extends ItemView {
     open.setAttribute("title", file.path);
     const capture = this.button(quick, "＋ 关联闪念", stop(() => this.createIdeaForTask(file)), "pvd-task-idea");
     capture.setAttribute("aria-label", `为任务“${file.basename}”创建关联闪念笔记`);
-    main.createSpan({ cls: "pvd-card-edit-hint", text: "左键聚焦 · 右键编辑" });
+    main.createSpan({ cls: "pvd-card-edit-hint", text: selectable ? "左键聚焦 · Ctrl/Cmd 多选 · 右键编辑" : "左键聚焦 · 右键编辑" });
+  }
+
+  renderSelectionState(check, file) {
+    const selected = this.isTaskSelected(file);
+    check.setAttribute("aria-checked", String(selected));
+    check.classList.toggle("is-checked", selected);
+    const card = check.closest(".pvd-task");
+    if (card) card.classList.toggle("is-selected", selected);
+  }
+
+  syncSelectionUi() {
+    this.contentEl.querySelectorAll(".pvd-task-check").forEach(check => {
+      const card = check.closest(".pvd-task");
+      const path = card?.getAttribute("data-task-path");
+      const selected = path ? this.selectedTasks.has(path) : false;
+      check.setAttribute("aria-checked", String(selected));
+      check.classList.toggle("is-checked", selected);
+      if (card) card.classList.toggle("is-selected", selected);
+    });
+  }
+
+  async renderSelectionToolbar() {
+    const toolbar = this.contentEl.querySelector("[data-pvd-selection-toolbar]");
+    if (!toolbar) return;
+    const files = this.selectedTaskFiles();
+    const count = toolbar.querySelector("[data-pvd-selection-count]");
+    const selectAll = toolbar.querySelector("[data-pvd-selection-all]");
+    const editButton = toolbar.querySelector("[data-pvd-selection-edit]");
+    const clear = toolbar.querySelector("[data-pvd-selection-clear]");
+    if (count) count.textContent = String(files.length);
+    if (selectAll) selectAll.textContent = translateUiText(this.areAllVisibleSelected() ? "取消全选" : "全选", this.plugin.settings.language);
+    toolbar.classList.toggle("is-hidden", files.length === 0);
+    if (editButton) editButton.disabled = files.length === 0;
+    if (clear) clear.disabled = files.length === 0;
+    this.syncSelectionUi();
   }
 
   async ensureFolder(dir) { let current = ""; for (const part of dir.split("/").filter(Boolean)) { current = current ? `${current}/${part}` : part; if (!this.app.vault.getAbstractFileByPath(current)) await this.app.vault.createFolder(current); } }
