@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.11
+
+### Fixed
+
+- Added `versions.json` at the repository root mapping every released version to its `minAppVersion`, so Obsidian's community review and older app versions can resolve plugin compatibility.
+- The release check now fails the build if `versions.json` is missing, lacks an entry for the current version, or disagrees with `manifest.minAppVersion`.
+
 ## 0.3.10
 
 ### Added

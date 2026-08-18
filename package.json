@@ -1,6 +1,6 @@
 {
   "name": "omni-workbench",
-  "version": "0.3.10",
+  "version": "0.3.11",
   "private": true,
   "description": "A local-first dashboard and task workbench for Obsidian.",
   "scripts": {
