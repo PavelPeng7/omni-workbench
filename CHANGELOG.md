@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.12
+
+### Changed
+
+- Published a patch release with the current stable Omni Workbench build and compatibility metadata.
+
 ## 0.3.11
 
 ### Fixed
