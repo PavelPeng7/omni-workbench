@@ -10,3 +10,9 @@ The final interface must preserve Omni Workbench's high-fidelity Claymorphism th
 
 - Keep changes targeted and maintainable.
 - Run `npm run release:check` after changes to release artifacts.
+
+## Agent skills
+
+- For repository feature work, start with `grill-with-docs`; use `to-spec` and `to-tickets` for multi-session work, then `implement` each unblocked ticket.
+- When creating or triaging work, read `docs/agents/issue-tracker.md`. When changing domain language or boundaries, read `docs/agents/domain.md` and record hard-to-reverse decisions under `docs/adr/`.
+- When changing source, tests, CI, or release behavior, follow `docs/agents/matt-workflow.md`; completion requires its quality gate and review against both repository standards and the originating spec.

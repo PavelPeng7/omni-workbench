@@ -2,5 +2,6 @@ data.json
 node_modules/
 vendor/
 dist/
+coverage/
 *.log
 .DS_Store

@@ -5,12 +5,15 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const root = process.cwd();
-const requiredFiles = ["README.md", "LICENSE", "main.js", "manifest.json", "versions.json"];
+const requiredFiles = ["README.md", "README.zh-CN.md", "LICENSE", "main.js", "manifest.json", "versions.json"];
 
 await Promise.all(requiredFiles.map((file) => access(resolve(root, file))));
 
 const manifest = JSON.parse(await readFile(resolve(root, "manifest.json"), "utf8"));
 const versions = JSON.parse(await readFile(resolve(root, "versions.json"), "utf8"));
+const packageData = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
+const readme = await readFile(resolve(root, "README.md"), "utf8");
+const readmeZh = await readFile(resolve(root, "README.zh-CN.md"), "utf8");
 const errors = [];
 
 if (!/^[a-z]+(?:-[a-z]+)*$/.test(manifest.id ?? "")) errors.push("manifest.id must contain lowercase letters and hyphens only.");
@@ -21,6 +24,9 @@ for (const key of ["name", "version", "minAppVersion", "description", "author", 
   if (manifest[key] === undefined || manifest[key] === "") errors.push(`manifest.${key} is required.`);
 }
 if (typeof manifest.isDesktopOnly !== "boolean") errors.push("manifest.isDesktopOnly must be a boolean.");
+if (packageData.version !== manifest.version) errors.push(`package.json version must match manifest.version (${manifest.version}).`);
+if (!readme.includes(`VERSION-${manifest.version}-`)) errors.push(`README.md version badge must match manifest.version (${manifest.version}).`);
+if (!readmeZh.includes(`VERSION-${manifest.version}-`)) errors.push(`README.zh-CN.md version badge must match manifest.version (${manifest.version}).`);
 if (versions[manifest.version] === undefined) errors.push(`versions.json is missing an entry for ${manifest.version}.`);
 else if (versions[manifest.version] !== manifest.minAppVersion) errors.push(`versions.json entry for ${manifest.version} must match manifest.minAppVersion (${manifest.minAppVersion}).`);
 

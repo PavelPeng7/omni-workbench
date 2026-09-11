@@ -6,10 +6,26 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "check": "node scripts/check-release.mjs",
-    "release:check": "npm run build && npm run check"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run --coverage",
+    "quality": "npm run typecheck && npm run lint && npm test",
+    "release:check": "npm run build && npm run quality && npm run check"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@eslint/json": "^2.1.0",
+    "@vitest/coverage-v8": "^5.0.0",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.10.0",
+    "eslint-plugin-obsidianmd": "^0.4.2",
+    "obsidian": "^1.13.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.70.0",
+    "vitest": "^5.0.0"
+  }
 }
