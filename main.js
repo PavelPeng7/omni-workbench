@@ -6701,6 +6701,8 @@ var UI_TEXT_EN = {
   "选择 Omni Workbench 的界面语言。仓库目录、字段和值不会被改写。": "Choose the Omni Workbench interface language. Vault folders, fields, and values are not rewritten.",
   "首次使用 · 约 1 分钟": "First use · About 1 minute",
   "先搭好工作区，再开始记录": "Set up the workspace, then start capturing",
+  "转换为笔记类型": "Convert to note type",
+  "开始转换": "Convert",
   "推荐初始化会创建任务系统、任务模板、任务总表和三类知识文件夹。已有文件只会保留，不会覆盖或移动。": "Recommended setup creates the task system, template, task table, and three knowledge folders. Existing files are preserved.",
   "准备完成": "Ready",
   "项已就绪": "items ready",
@@ -9090,6 +9092,31 @@ module.exports = class FocusWorkbenchPlugin extends Plugin {
     this.addSettingTab(new FocusWorkbenchSettingTab(this.app, this));
     this.ribbonIconEl = this.addRibbonIcon("layout-dashboard", this.settings.language === "en" ? "Open Omni Workbench" : "打开 Omni Workbench", () => this.activateView());
     this.addCommand({ id: "open-focus-workbench", name: "Open Omni Workbench", callback: () => this.activateView() });
+    this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => this.addKnowledgeConversionMenu(menu, file)));
+  }
+  knowledgeNoteType(file) {
+    var _a, _b;
+    const folders = { fleeting: this.settings.inboxFolder, literature: this.settings.literatureFolder, permanent: this.settings.permanentFolder };
+    for (const [type2, folder] of Object.entries(folders)) if (folder && (file.path === folder || file.path.startsWith(`${folder.replace(/\/$/, "")}/`))) return type2;
+    const type = (_b = (_a = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter) == null ? void 0 : _b.type;
+    return { "闪念笔记": "fleeting", "文献笔记": "literature", "永久笔记": "permanent" }[type] || null;
+  }
+  addKnowledgeConversionMenu(menu, file) {
+    if (!file || file.extension !== "md") return;
+    const current = this.knowledgeNoteType(file);
+    const targets = knowledgeNoteTemplateDefinitions.filter((target) => target.type !== current);
+    if (!targets.length) return;
+    menu.addItem((item) => item.setTitle(translateUiText("转换为笔记类型", this.settings.language)).setIcon("shuffle").setSubmenu((submenu) => targets.forEach((target) => submenu.addItem((targetItem) => targetItem.setTitle(translateUiText(target.title, this.settings.language)).onClick(() => this.confirmNativeConversion(file, target))))));
+  }
+  async confirmNativeConversion(file, target) {
+    const folder = { fleeting: this.settings.inboxFolder, literature: this.settings.literatureFolder, permanent: this.settings.permanentFolder }[target.type] || "";
+    const destination = `${folder.replace(/\/$/, "")}/${file.name}`;
+    new ConfirmModal(this.app, "转换为笔记类型", `将“${file.path}”转换为${target.title}并移动到“${destination}”？`, "开始转换", async () => {
+      var _a, _b;
+      await this.activateView();
+      const view = (_a = this.app.workspace.getLeavesOfType(VIEW_TYPE)[0]) == null ? void 0 : _a.view;
+      await ((_b = view == null ? void 0 : view.convertNoteToType) == null ? void 0 : _b.call(view, file, target.type));
+    }).open();
   }
   async loadSettings() {
     const saved = await this.loadData() || {};

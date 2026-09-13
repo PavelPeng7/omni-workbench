@@ -62,7 +62,7 @@ const UI_TEXT_EN = {
   "连接现有仓库": "Connect an existing vault", "仅在你已有自己的目录或 frontmatter 字段时使用。填写现有位置和字段名，不会移动或修改笔记。": "Use this only if you already have custom folders or frontmatter fields. Existing notes will not be moved or modified.",
   "闪念笔记目录": "Fleeting-note folder", "文献笔记目录": "Literature-note folder", "永久笔记目录": "Permanent-note folder", "任务目录": "Task folder", "项目目录（可选）": "Project folder (optional)", "任务类型字段": "Task type field", "任务类型值": "Task type value", "状态字段": "Status field", "计划日期字段": "Planned date field", "所属项目字段": "Project field", "优先级字段": "Priority field", "相对 vault 的目录路径": "Folder path relative to the vault", "frontmatter 字段名": "Frontmatter field name",
   "界面语言": "Interface language", "选择 Omni Workbench 的界面语言。仓库目录、字段和值不会被改写。": "Choose the Omni Workbench interface language. Vault folders, fields, and values are not rewritten.",
-  "首次使用 · 约 1 分钟": "First use · About 1 minute", "先搭好工作区，再开始记录": "Set up the workspace, then start capturing", "推荐初始化会创建任务系统、任务模板、任务总表和三类知识文件夹。已有文件只会保留，不会覆盖或移动。": "Recommended setup creates the task system, template, task table, and three knowledge folders. Existing files are preserved.",
+  "首次使用 · 约 1 分钟": "First use · About 1 minute", "先搭好工作区，再开始记录": "Set up the workspace, then start capturing", "转换为笔记类型": "Convert to note type", "开始转换": "Convert", "推荐初始化会创建任务系统、任务模板、任务总表和三类知识文件夹。已有文件只会保留，不会覆盖或移动。": "Recommended setup creates the task system, template, task table, and three knowledge folders. Existing files are preserved.",
   "准备完成": "Ready", "项已就绪": "items ready", "推荐结构已准备好": "Recommended structure is ready", "自动创建推荐结构": "Create the recommended structure", "检查并补齐": "Check and complete", "一键初始化": "One-click setup", "初始化推荐工作区": "Set up the recommended workspace", "将补齐三类知识文件夹、任务与项目目录、任务模板和任务总表。已有文件不会被覆盖，是否继续？": "This will add the three knowledge folders, task and project folders, task template, and task table. Existing files will not be overwritten. Continue?", "开始初始化": "Start setup",
   "包括 3 个知识目录、任务、项目与每日进展目录，以及任务模板和 Obsidian Bases 任务总表；可以重复执行，已有内容不会被改写。": "Includes three knowledge folders, task, project, and daily-progress folders, plus a task template and Obsidian Bases task table. It is safe to run again.",
   "三步上手流程": "Three-step getting-started flow", "它们代表内容从随手记录到可复用知识的三个阶段，而不是三个主题分类。": "They represent three stages from quick capture to reusable knowledge, not three topic categories.",
@@ -1390,6 +1390,29 @@ module.exports = class FocusWorkbenchPlugin extends Plugin {
     this.addSettingTab(new FocusWorkbenchSettingTab(this.app, this));
     this.ribbonIconEl = this.addRibbonIcon("layout-dashboard", this.settings.language === "en" ? "Open Omni Workbench" : "打开 Omni Workbench", () => this.activateView());
     this.addCommand({ id: "open-focus-workbench", name: "Open Omni Workbench", callback: () => this.activateView() });
+    this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => this.addKnowledgeConversionMenu(menu, file)));
+  }
+  knowledgeNoteType(file) {
+    const folders = { fleeting: this.settings.inboxFolder, literature: this.settings.literatureFolder, permanent: this.settings.permanentFolder };
+    for (const [type, folder] of Object.entries(folders)) if (folder && (file.path === folder || file.path.startsWith(`${folder.replace(/\/$/, "")}/`))) return type;
+    const type = this.app.metadataCache.getFileCache(file)?.frontmatter?.type;
+    return ({ "闪念笔记": "fleeting", "文献笔记": "literature", "永久笔记": "permanent" })[type] || null;
+  }
+  addKnowledgeConversionMenu(menu, file) {
+    if (!file || file.extension !== "md") return;
+    const current = this.knowledgeNoteType(file);
+    const targets = knowledgeNoteTemplateDefinitions.filter(target => target.type !== current);
+    if (!targets.length) return;
+    menu.addItem(item => item.setTitle(translateUiText("转换为笔记类型", this.settings.language)).setIcon("shuffle").setSubmenu(submenu => targets.forEach(target => submenu.addItem(targetItem => targetItem.setTitle(translateUiText(target.title, this.settings.language)).onClick(() => this.confirmNativeConversion(file, target))))));
+  }
+  async confirmNativeConversion(file, target) {
+    const folder = ({ fleeting: this.settings.inboxFolder, literature: this.settings.literatureFolder, permanent: this.settings.permanentFolder })[target.type] || "";
+    const destination = `${folder.replace(/\/$/, "")}/${file.name}`;
+    new ConfirmModal(this.app, "转换为笔记类型", `将“${file.path}”转换为${target.title}并移动到“${destination}”？`, "开始转换", async () => {
+      await this.activateView();
+      const view = this.app.workspace.getLeavesOfType(VIEW_TYPE)[0]?.view;
+      await view?.convertNoteToType?.(file, target.type);
+    }).open();
   }
   async loadSettings() { const saved = await this.loadData() || {}; this.settings = Object.assign({}, DEFAULT_SETTINGS, saved, { schema: Object.assign({}, DEFAULT_SETTINGS.schema, saved.schema || {}) }); }
   async saveSettings() { await this.saveData(this.settings); }
