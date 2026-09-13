@@ -5,6 +5,7 @@ import { setFrontmatterField } from "./core/frontmatter";
 import { configuredKnowledgeNoteTemplates, knowledgeNoteTemplateDefaults, knowledgeNoteTemplateDefinitions } from "./core/knowledge-templates";
 import { planNoteConversion } from "./core/note-conversion";
 import { validateWorkbenchDocumentFolders } from "./core/workbench-document-model";
+import { planWorkbenchDocumentCreation } from "./core/workbench-document-creation";
 import { planWorkbenchDocumentTemplateSetup } from "./core/workbench-document-templates";
 
 const { ItemView, Menu, Modal, Notice, Plugin, PluginSettingTab, Setting, normalizePath } = require("obsidian");
@@ -522,6 +523,7 @@ class FocusWorkbenchView extends ItemView {
     const quick = shell.createDiv({ cls: "pvd-quick" });
     this.button(quick, "记录灵感", () => this.createIdea());
     this.button(quick, "新建任务", () => this.createTask());
+    this.button(quick, "新建项目", () => this.createProject());
     this.button(quick, "知识卡片流程", async () => { this.tab = "knowledge"; await this.render(); });
     const inbox = this.pendingIdeas().sort((a, b) => this.ideaCapturedAt(a) - this.ideaCapturedAt(b)).slice(0, 5);
     const inboxCard = shell.createEl("section", { cls: "pvd-card pvd-inbox" });
@@ -1076,8 +1078,11 @@ class FocusWorkbenchView extends ItemView {
   async createTask() {
     const defaults = { project: "", priority: "P2", status: "待做", plan: this.dateKey(), estimate: "" };
     new TaskEditorModal(this.app, { basename: "新任务" }, defaults, this.projectOptions(), async values => {
-      const dir = this.config().task; await this.ensureFolder(dir);
-      const file = await this.app.vault.create(this.uniqueTaskPath(dir, values.title), await this.newTaskContent(values.title));
+      const config = this.config();
+      const result = planWorkbenchDocumentCreation({ type: "task", title: values.title, folders: { task: config.task, project: config.project, fleeting: config.inbox, literature: config.literature, permanent: config.permanent }, occupiedPaths: this.app.vault.getAllLoadedFiles().map(entry => entry.path) });
+      if (!result.ok) { showNotice(result.error); return; }
+      for (const directory of result.plan.directories) await this.ensureFolder(directory);
+      const file = await this.app.vault.create(result.plan.documentPath, await this.newTaskContent(values.title));
       await this.app.fileManager.processFrontMatter(file, next => {
         this.setTaskProperty(next, "projectField", values.project ? `[[${values.project}]]` : "");
         this.setTaskProperty(next, "priorityField", values.priority);
@@ -1087,6 +1092,18 @@ class FocusWorkbenchView extends ItemView {
       if (values.status !== "待做") await this.transitionTask(file, values.status);
       showNotice("任务已创建"); await this.render();
     }, [], { mode: "create", heading: "新建任务", lead: "填写任务属性并保存，任务会写入任务目录，不会离开当前工作台。", submitLabel: "创建任务", validateTitle: title => this.validateNoteTitle(title) }).open();
+  }
+  async createProject() {
+    new TextPromptModal(this.app, "新建项目", "为项目工作区命名", async title => {
+      const config = this.config();
+      const result = planWorkbenchDocumentCreation({ type: "project", title, folders: { task: config.task, project: config.project, fleeting: config.inbox, literature: config.literature, permanent: config.permanent }, occupiedPaths: this.app.vault.getAllLoadedFiles().map(entry => entry.path) });
+      if (!result.ok) { showNotice(result.error); return; }
+      for (const directory of result.plan.directories) await this.ensureFolder(directory);
+      const template = this.app.vault.getAbstractFileByPath(this.plugin.settings.projectTemplatePath);
+      const source = template && !template.children ? await this.app.vault.cachedRead(template) : starterProjectTemplate();
+      const file = await this.app.vault.create(result.plan.documentPath, source.replace(/^# 新项目$/m, "# " + title));
+      showNotice("项目工作区已创建"); await this.openFile(file); await this.render();
+    }, title => this.validateNoteTitle(title)).open();
   }
   async newTaskContent(title) {
     const schema = this.schema();
