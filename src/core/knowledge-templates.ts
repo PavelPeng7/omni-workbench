@@ -8,7 +8,7 @@ export interface KnowledgeNoteTemplate {
   content: string;
 }
 
-interface KnowledgeNoteTemplateDefinition {
+export interface KnowledgeNoteTemplateDefinition {
   type: KnowledgeNoteType;
   pathKey: KnowledgeNoteTemplatePathKey;
   defaultPath: string;

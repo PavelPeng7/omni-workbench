@@ -3,6 +3,7 @@ import { calendarKey as toCalendarKey, dateKey as formatDateKey, isPastCalendarD
 import { elapsedSeconds as computeElapsedSeconds, expectedSeconds as expectedSecondsFromMinutes, formatDuration as formatTimerDuration } from "./core/timer";
 import { setFrontmatterField } from "./core/frontmatter";
 import { configuredKnowledgeNoteTemplates, knowledgeNoteTemplateDefaults, knowledgeNoteTemplateDefinitions, planKnowledgeNoteTemplateSetup } from "./core/knowledge-templates";
+import { planNoteConversion } from "./core/note-conversion";
 
 const { ItemView, Modal, Notice, Plugin, PluginSettingTab, Setting, normalizePath } = require("obsidian");
 
@@ -1025,17 +1026,33 @@ class FocusWorkbenchView extends ItemView {
     await this.app.fileManager.processFrontMatter(file, fm => { fm["状态"] = "已转任务"; fm["处理日期"] = this.dateKey(); fm["关联任务"] = `[[${task.path.replace(/\.md$/, "")}]]`; });
     showNotice("已从闪念创建任务，并保留双向来源"); await this.render(); await this.openFile(task);
   }
-  async convertIdeaToNote(file, kind) {
+  async convertNoteToType(file, kind) {
     const linkedTask = this.ideaLinkedTask(file); const previousPath = file.path;
-    const target = kind === "literature"
-      ? { dir: this.config().literature, type: "文献笔记", status: "待整理", notice: "已转为文献笔记" }
-      : { dir: this.config().permanent, type: "永久笔记", status: "已沉淀", notice: "已转为永久笔记" };
-    await this.ensureFolder(target.dir);
-    await this.app.fileManager.processFrontMatter(file, fm => { fm.type = target.type; fm["状态"] = target.status; fm["处理日期"] = this.dateKey(); });
-    const path = this.uniqueMovePath(target.dir, file); if (path !== file.path) await this.app.fileManager.renameFile(file, path);
-    if (linkedTask && path !== previousPath) await this.replaceTaskIdeaLink(linkedTask, previousPath, path);
-    showNotice(target.notice); await this.render();
+    const target = knowledgeNoteTemplateDefinitions.find(template => template.type === kind);
+    if (!target) { showNotice("不支持的知识笔记类型。"); return; }
+    const folderByType = { fleeting: this.config().inbox, literature: this.config().literature, permanent: this.config().permanent };
+    const templateFile = this.app.vault.getAbstractFileByPath(this.plugin.settings[target.pathKey] || target.defaultPath);
+    if (!templateFile || templateFile.children) { showNotice("目标笔记模板缺失或无法读取。"); return; }
+    let sourceContent; let templateContent;
+    try { sourceContent = await this.app.vault.cachedRead(file); templateContent = await this.app.vault.cachedRead(templateFile); } catch (_) { showNotice("无法读取源笔记或目标模板。"); return; }
+    const folders = [this.config().inbox, this.config().literature, this.config().permanent];
+    const targetFolder = folderByType[kind].replace(/\/$/, "");
+    const destinationPath = `${targetFolder}/${file.name}`;
+    const result = planNoteConversion({ sourcePath: file.path, sourceContent, templatePath: templateFile.path, templateContent, target: { type: target.type, folder: targetFolder, typeValue: target.typeValue, status: target.workflowStatus }, folders, conversionDate: this.dateKey(), destinationOccupied: Boolean(this.app.vault.getAbstractFileByPath(destinationPath) && destinationPath !== file.path) });
+    if (!result.ok) { showNotice(result.error); return; }
+    await this.ensureFolder(targetFolder);
+    try {
+      await this.app.vault.modify(file, result.plan.content);
+      await this.app.fileManager.renameFile(file, result.plan.destinationPath);
+    } catch (error) {
+      try { await this.app.vault.modify(file, sourceContent); } catch (_) { /* Best-effort compensation. */ }
+      showNotice("转换失败，已尝试恢复原笔记。");
+      return;
+    }
+    if (linkedTask && result.plan.destinationPath !== previousPath) await this.replaceTaskIdeaLink(linkedTask, previousPath, result.plan.destinationPath);
+    showNotice(`已转为${target.title}：${result.plan.destinationPath}`); await this.render();
   }
+  async convertIdeaToNote(file, kind) { return this.convertNoteToType(file, kind); }
   discardIdea(file) { new ConfirmModal(this.app, "舍弃闪念", `将“${this.ideaTitle(file)}”移入 Obsidian 回收站，并清理任务中的关联？`, "舍弃", async () => { const linkedTask = this.ideaLinkedTask(file); await this.replaceTaskIdeaLink(linkedTask, file.path); await this.app.fileManager.trashFile(file); showNotice("闪念已移入回收站，任务关联已清理"); await this.render(); }).open(); }
   async createTask() {
     const defaults = { project: "", priority: "P2", status: "待做", plan: this.dateKey(), estimate: "" };
