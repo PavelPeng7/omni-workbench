@@ -20,15 +20,22 @@ describe("planNoteConversion", () => {
     expect(result).toEqual({ ok: false, error: "A file or folder already exists at the destination." });
   });
 
-  it("rejects a template that would duplicate the source body", () => {
+  it("discards template body text, including repeated content placeholders", () => {
     const result = planNoteConversion({ ...input(), templateContent: "---\ntype: 永久笔记\n---\n{{content}}\n{{content}}" });
-    expect(result).toEqual({ ok: false, error: "The target template contains {{content}} more than once." });
+    expect(result).toMatchObject({ ok: true });
+    if (result.ok) {
+      expect(result.plan.content).toContain("原始正文");
+      expect(result.plan.content).not.toContain("{{content}}");
+    }
   });
 
-  it("appends the source body once when a valid template omits the placeholder", () => {
+  it("preserves only the source body when the template contains prose", () => {
     const result = planNoteConversion({ ...input(), templateContent: "---\ntype: 永久笔记\n---\n# 模板正文" });
     expect(result).toMatchObject({ ok: true });
-    if (result.ok) expect(result.plan.content).toContain("# 模板正文\n\n原始正文");
+    if (result.ok) {
+      expect(result.plan.content).toContain("原始正文");
+      expect(result.plan.content).not.toContain("# 模板正文");
+    }
   });
 
   it("rejects overlapping configured knowledge folders before creating a plan", () => {

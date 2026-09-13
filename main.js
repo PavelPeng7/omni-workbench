@@ -6476,8 +6476,6 @@ function planNoteConversion(input) {
   if (isFailure(source)) return { ok: false, error: source.error };
   const template = parseNote(input.templateContent, "Template");
   if (isFailure(template)) return { ok: false, error: template.error };
-  const placeholderCount = (template.body.match(/{{content}}/g) || []).length;
-  if (placeholderCount > 1) return { ok: false, error: "The target template contains {{content}} more than once." };
   const name = input.sourcePath.slice(input.sourcePath.lastIndexOf("/") + 1);
   const destinationPath = `${input.target.folder.replace(/\/$/, "")}/${name}`;
   if (destinationPath === input.sourcePath) return { ok: false, error: "The note already has this type." };
@@ -6491,9 +6489,7 @@ function planNoteConversion(input) {
     if (key === "tags" || key === "aliases" || Array.isArray(source.frontmatter[key]) || Array.isArray(template.frontmatter[key])) merged[key] = [...new Set([...list(source.frontmatter[key]), ...list(template.frontmatter[key])].map((value) => String(value).trim()).filter(Boolean))];
   }
   Object.assign(merged, { type: input.target.typeValue, "状态": input.target.status, "处理日期": input.conversionDate });
-  const body = placeholderCount === 1 ? template.body.replace("{{content}}", source.body) : `${template.body.replace(/\s+$/, "")}
-
-${source.body.replace(/^\r?\n/, "")}`;
+  const body = source.body;
   return { ok: true, plan: { destinationPath, content: `---
 ${stringify3(merged).replace(/\s+$/, "")}
 ---
@@ -6783,7 +6779,7 @@ var UI_TEXT_EN = {
   "包括 3 个知识目录、任务、项目与每日进展目录，以及任务与三类知识笔记模板和 Obsidian Bases 任务总表；可以重复执行，已有内容不会被改写。": "Includes three knowledge folders; task, project, and daily-progress folders; task and three knowledge-note templates; and an Obsidian Bases task table. It is safe to run again.",
   "将补齐三类知识文件夹、任务与项目目录、任务与三类知识笔记模板和任务总表。已有文件不会被覆盖，是否继续？": "This will add the three knowledge folders; task and project folders; task and three knowledge-note templates; and the task table. Existing files will not be overwritten. Continue?",
   "三类知识笔记模板 · 定义转换后的笔记格式": "Three knowledge-note templates · Define converted note formats",
-  "每种知识笔记类型都有独立模板。转换功能会保留原笔记内容，并将它放入模板中的 {{content}} 位置。": "Each knowledge-note type has its own template. Conversion preserves the original note body and places it at {{content}}.",
+  "每种知识笔记类型都有独立模板。转换时仅应用模板的 frontmatter，原笔记正文会完整保留。": "Each knowledge-note type has its own template. Conversion applies only its frontmatter and preserves the original note body.",
   "闪念笔记模板": "Fleeting-note template",
   "文献笔记模板": "Literature-note template",
   "永久笔记模板": "Permanent-note template",
@@ -8986,7 +8982,7 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
     }));
     const knowledgeTemplateCard = assets.createDiv({ cls: "pvd-settings-asset-card" });
     knowledgeTemplateCard.createEl("strong", { text: "三类知识笔记模板 · 定义转换后的笔记格式" });
-    knowledgeTemplateCard.createEl("p", { text: "每种知识笔记类型都有独立模板。转换功能会保留原笔记内容，并将它放入模板中的 {{content}} 位置。" });
+    knowledgeTemplateCard.createEl("p", { text: "每种知识笔记类型都有独立模板。转换时仅应用模板的 frontmatter，原笔记正文会完整保留。" });
     knowledgeNoteTemplateDefinitions.forEach((template) => {
       new Setting(knowledgeTemplateCard).setName(fileExists(value(template.pathKey)) ? "知识模板已找到" : "等待初始化").setDesc(template.label).addText((text) => text.setValue(value(template.pathKey)).setPlaceholder(defaults[template.pathKey]).onChange(async (next) => {
         settings[template.pathKey] = normalizeVaultPath(next);

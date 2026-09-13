@@ -31,8 +31,6 @@ export function planNoteConversion(input: NoteConversionInput): NoteConversionRe
   if (!input.templatePath.toLowerCase().endsWith(".md") || !input.templateContent) return { ok: false, error: "The target template is missing or unreadable." };
   const source = parseNote(input.sourceContent, "Source"); if (isFailure(source)) return { ok: false, error: source.error };
   const template = parseNote(input.templateContent, "Template"); if (isFailure(template)) return { ok: false, error: template.error };
-  const placeholderCount = (template.body.match(/{{content}}/g) || []).length;
-  if (placeholderCount > 1) return { ok: false, error: "The target template contains {{content}} more than once." };
   const name = input.sourcePath.slice(input.sourcePath.lastIndexOf("/") + 1);
   const destinationPath = `${input.target.folder.replace(/\/$/, "")}/${name}`;
   if (destinationPath === input.sourcePath) return { ok: false, error: "The note already has this type." };
@@ -46,6 +44,6 @@ export function planNoteConversion(input: NoteConversionInput): NoteConversionRe
     if (key === "tags" || key === "aliases" || Array.isArray(source.frontmatter[key]) || Array.isArray(template.frontmatter[key])) merged[key] = [...new Set([...list(source.frontmatter[key]), ...list(template.frontmatter[key])].map(value => String(value).trim()).filter(Boolean))];
   }
   Object.assign(merged, { type: input.target.typeValue, "状态": input.target.status, "处理日期": input.conversionDate });
-  const body = placeholderCount === 1 ? template.body.replace("{{content}}", source.body) : `${template.body.replace(/\s+$/, "")}\n\n${source.body.replace(/^\r?\n/, "")}`;
+  const body = source.body;
   return { ok: true, plan: { destinationPath, content: `---\n${stringify(merged).replace(/\s+$/, "")}\n---\n${body}` } };
 }
