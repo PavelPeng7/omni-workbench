@@ -4,6 +4,7 @@ export interface WorkbenchDocumentCreationInput {
   type: Extract<WorkbenchDocumentType, "task" | "project">;
   title: string;
   folders: WorkbenchDocumentFolders;
+  projectWorkspace?: string;
   occupiedPaths: readonly string[];
 }
 
@@ -21,9 +22,9 @@ function normalizePath(path: string): string {
 }
 
 export function planWorkbenchDocumentCreation(input: WorkbenchDocumentCreationInput): WorkbenchDocumentCreationResult {
-  const root = normalizePath(input.folders[input.type]);
+  const root = input.type === "task" ? normalizePath(input.projectWorkspace || "") + "/任务" : normalizePath(input.folders.project);
   const title = input.title.trim();
-  if (!root || !title) return { ok: false, error: "A document title and destination folder are required." };
+  if (!root || root === "/任务" || !title) return { ok: false, error: "A document title and destination folder are required." };
 
   const occupied = new Set(input.occupiedPaths.map(normalizePath));
   if (input.type === "task") {

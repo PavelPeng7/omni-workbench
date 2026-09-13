@@ -6497,9 +6497,9 @@ function normalizePath2(path) {
   return path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
 }
 function planWorkbenchDocumentCreation(input) {
-  const root = normalizePath2(input.folders[input.type]);
+  const root = input.type === "task" ? normalizePath2(input.projectWorkspace || "") + "/任务" : normalizePath2(input.folders.project);
   const title = input.title.trim();
-  if (!root || !title) return { ok: false, error: "A document title and destination folder are required." };
+  if (!root || root === "/任务" || !title) return { ok: false, error: "A document title and destination folder are required." };
   const occupied = new Set(input.occupiedPaths.map(normalizePath2));
   if (input.type === "task") {
     let index2 = 1;
@@ -6553,11 +6553,10 @@ var VIEW_TYPE = "focus-workbench-view";
 var DEFAULT_SETTINGS = {
   language: "zh-CN",
   taskBasePath: "目标与任务/任务总表.base",
-  taskFolder: "Omni Workbench/任务",
-  projectFolder: "Omni Workbench/项目",
-  inboxFolder: "Omni Workbench/闪念笔记",
-  literatureFolder: "Omni Workbench/文献笔记",
-  permanentFolder: "Omni Workbench/永久笔记",
+  projectFolder: "项目",
+  inboxFolder: "闪念笔记",
+  literatureFolder: "文献笔记",
+  permanentFolder: "永久笔记",
   taskTemplatePath: "模板/任务模板.md",
   projectTemplatePath: "模板/项目模板.md",
   ...knowledgeNoteTemplateDefaults(),
@@ -7190,8 +7189,7 @@ var SetupModal = class extends Modal {
       ["闪念笔记目录", "inboxFolder", settings.inboxFolder || ""],
       ["文献笔记目录", "literatureFolder", settings.literatureFolder || ""],
       ["永久笔记目录", "permanentFolder", settings.permanentFolder || ""],
-      ["任务目录", "taskFolder", settings.taskFolder || ""],
-      ["项目目录（可选）", "projectFolder", settings.projectFolder || ""],
+      ["项目目录", "projectFolder", settings.projectFolder || ""],
       ["任务类型字段", "typeField", schema4.typeField],
       ["任务类型值", "typeValue", schema4.typeValue],
       ["状态字段", "statusField", schema4.statusField],
@@ -7209,14 +7207,14 @@ var SetupModal = class extends Modal {
     const actions = contentEl.createDiv({ cls: "pvd-modal-actions" });
     const save = actions.createEl("button", { text: "保存配置", cls: "mod-cta" });
     save.addEventListener("click", async () => {
-      const taskFolder = normalizeVaultPath(inputs.get("taskFolder").value);
-      if (!taskFolder) {
-        showNotice("请选择任务目录。");
+      const projectFolder = normalizeVaultPath(inputs.get("projectFolder").value);
+      if (!projectFolder) {
+        showNotice("请选择项目目录。");
         return;
       }
       const nextSchema = Object.assign({}, schema4);
       ["typeField", "typeValue", "statusField", "planField", "projectField", "priorityField"].forEach((key) => nextSchema[key] = inputs.get(key).value.trim() || schema4[key]);
-      ["inboxFolder", "literatureFolder", "permanentFolder", "taskFolder", "projectFolder"].forEach((key) => this.plugin.settings[key] = normalizeVaultPath(inputs.get(key).value));
+      ["inboxFolder", "literatureFolder", "permanentFolder", "projectFolder"].forEach((key) => this.plugin.settings[key] = normalizeVaultPath(inputs.get(key).value));
       this.plugin.settings.schema = nextSchema;
       await this.plugin.saveSettings();
       this.close();
@@ -7413,11 +7411,17 @@ var FocusWorkbenchView = class extends ItemView {
   }
   allTaskFiles() {
     const schema4 = this.schema();
-    const taskFolder = this.config().task;
-    return this.files().filter((file) => this.starts(file, taskFolder) && String(this.meta(file)[schema4.typeField] || "") === schema4.typeValue);
+    const projectRoot = this.config().project;
+    return this.files().filter((file) => this.starts(file, projectRoot) && file.path.includes("/任务/") && String(this.meta(file)[schema4.typeField] || "") === schema4.typeValue);
   }
   projectOptions() {
-    return this.files().filter((file) => this.starts(file, this.config().project) && this.useful(file)).map((file) => file.basename).sort((a, b) => a.localeCompare(b, "zh-CN"));
+    return this.files().filter((file) => this.starts(file, this.config().project) && file.name === "项目.md").map((file) => {
+      var _a;
+      return ((_a = file.parent) == null ? void 0 : _a.name) || file.basename;
+    }).sort((a, b) => a.localeCompare(b, "zh-CN"));
+  }
+  projectWorkspace(name) {
+    return this.config().project + "/" + name;
   }
   tasks() {
     return this.sourceTasks || [];
@@ -8687,8 +8691,12 @@ date: ${this.dateKey()}
   async createTask() {
     const defaults = { project: "", priority: "P2", status: "待做", plan: this.dateKey(), estimate: "" };
     new TaskEditorModal(this.app, { basename: "新任务" }, defaults, this.projectOptions(), async (values) => {
+      if (!values.project) {
+        showNotice("请选择项目。");
+        return;
+      }
       const config = this.config();
-      const result = planWorkbenchDocumentCreation({ type: "task", title: values.title, folders: { task: config.task, project: config.project, fleeting: config.inbox, literature: config.literature, permanent: config.permanent }, occupiedPaths: this.app.vault.getAllLoadedFiles().map((entry) => entry.path) });
+      const result = planWorkbenchDocumentCreation({ type: "task", title: values.title, folders: { task: "", project: config.project, fleeting: config.inbox, literature: config.literature, permanent: config.permanent }, projectWorkspace: this.projectWorkspace(values.project), occupiedPaths: this.app.vault.getAllLoadedFiles().map((entry) => entry.path) });
       if (!result.ok) {
         showNotice(result.error);
         return;
@@ -8704,12 +8712,12 @@ date: ${this.dateKey()}
       if (values.status !== "待做") await this.transitionTask(file, values.status);
       showNotice("任务已创建");
       await this.render();
-    }, [], { mode: "create", heading: "新建任务", lead: "填写任务属性并保存，任务会写入任务目录，不会离开当前工作台。", submitLabel: "创建任务", validateTitle: (title) => this.validateNoteTitle(title) }).open();
+    }, [], { mode: "create", heading: "新建任务", lead: "选择项目后创建；任务会保存在该项目的任务目录。", submitLabel: "创建任务", validateTitle: (title) => this.validateNoteTitle(title) }).open();
   }
   async createProject() {
     new TextPromptModal(this.app, "新建项目", "为项目工作区命名", async (title) => {
       const config = this.config();
-      const result = planWorkbenchDocumentCreation({ type: "project", title, folders: { task: config.task, project: config.project, fleeting: config.inbox, literature: config.literature, permanent: config.permanent }, occupiedPaths: this.app.vault.getAllLoadedFiles().map((entry) => entry.path) });
+      const result = planWorkbenchDocumentCreation({ type: "project", title, folders: { task: "", project: config.project, fleeting: config.inbox, literature: config.literature, permanent: config.permanent }, occupiedPaths: this.app.vault.getAllLoadedFiles().map((entry) => entry.path) });
       if (!result.ok) {
         showNotice(result.error);
         return;
@@ -8965,11 +8973,10 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
     }));
     languageSetting.settingEl.addClass("pvd-language-setting");
     const defaults = {
-      inboxFolder: "Omni Workbench/闪念笔记",
-      literatureFolder: "Omni Workbench/文献笔记",
-      permanentFolder: "Omni Workbench/永久笔记",
-      taskFolder: "Omni Workbench/任务",
-      projectFolder: "Omni Workbench/项目",
+      inboxFolder: "闪念笔记",
+      literatureFolder: "文献笔记",
+      permanentFolder: "永久笔记",
+      projectFolder: "项目",
       taskTemplatePath: "模板/任务模板.md",
       projectTemplatePath: "模板/项目模板.md",
       ...knowledgeNoteTemplateDefaults(),
@@ -8985,7 +8992,7 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
     const saveDocumentFolder = async (key, next) => {
       const path = normalizeVaultPath(next);
       const candidate = {
-        task: key === "taskFolder" ? path : value("taskFolder"),
+        task: "项目任务",
         project: key === "projectFolder" ? path : value("projectFolder"),
         fleeting: key === "inboxFolder" ? path : value("inboxFolder"),
         literature: key === "literatureFolder" ? path : value("literatureFolder"),
@@ -8999,7 +9006,7 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
       settings[key] = path;
       await this.plugin.saveSettings();
     };
-    const folderReady = ["inboxFolder", "literatureFolder", "permanentFolder", "taskFolder", "projectFolder"].every((key) => folderExists(value(key))) && folderExists("目标与任务/任务管理/每日进展");
+    const folderReady = ["inboxFolder", "literatureFolder", "permanentFolder", "projectFolder"].every((key) => folderExists(value(key)));
     const templatePathKeys = { task: "taskTemplatePath", project: "projectTemplatePath", fleeting: "fleetingNoteTemplatePath", literature: "literatureNoteTemplatePath", permanent: "permanentNoteTemplatePath" };
     const taskTemplateReady = fileExists(value("taskTemplatePath"));
     const documentTemplatesReady = workbenchDocumentTemplates(settings).every((template) => fileExists(value(templatePathKeys[template.type])));
@@ -9010,11 +9017,11 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
     const heroCopy = hero.createDiv({ cls: "pvd-onboarding-hero-copy" });
     heroCopy.createEl("p", { cls: "pvd-onboarding-kicker", text: "首次使用 · 约 1 分钟" });
     heroCopy.createEl("strong", { cls: "pvd-onboarding-title", text: "先搭好工作区，再开始记录" });
-    heroCopy.createEl("p", { text: "推荐初始化会创建五类文档目录、五类模板、任务总表和每日进展目录。已有文件只会保留，不会覆盖或移动。" });
+    heroCopy.createEl("p", { text: "推荐初始化会创建工作台项目目录、三类知识目录和五类模板。项目中的任务只会创建在各自项目的任务子目录。已有文件只会保留，不会覆盖或移动。" });
     const progress = hero.createDiv({ cls: "pvd-onboarding-progress", attr: { role: "status", "aria-label": `初始化进度：完成 ${readyCount}/3` } });
     progress.createEl("strong", { text: `${readyCount}/3` });
     progress.createSpan({ text: readyCount === 3 ? "准备完成" : "项已就绪" });
-    new Setting(hero).setName(readyCount === 3 ? "推荐结构已准备好" : "自动创建推荐结构").setDesc("包括五类文档目录、五类模板、每日进展目录和 Obsidian Bases 任务总表；可以重复执行，已有内容不会被改写。").addButton((button) => button.setButtonText(readyCount === 3 ? "检查并补齐" : "一键初始化").setCta().onClick(() => new ConfirmModal(this.app, "初始化推荐工作区", "将补齐五类文档目录、五类模板和任务总表。已有文件不会被覆盖，是否继续？", "开始初始化", async () => {
+    new Setting(hero).setName(readyCount === 3 ? "推荐结构已准备好" : "自动创建推荐结构").setDesc("包括项目目录、三类知识目录、五类模板和可选的 Obsidian Bases 任务总表；不会创建顶层任务目录。").addButton((button) => button.setButtonText(readyCount === 3 ? "检查并补齐" : "一键初始化").setCta().onClick(() => new ConfirmModal(this.app, "初始化推荐工作区", "将补齐项目目录、三类知识目录、五类模板和任务总表；不会创建顶层任务目录。已有文件不会被覆盖，是否继续？", "开始初始化", async () => {
       var _a;
       Object.entries(defaults).forEach(([key, path]) => {
         if (!settings[key]) settings[key] = path;
@@ -9025,12 +9032,6 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
       }
       if (!settings.taskBasePath.endsWith(".base")) {
         showNotice("任务总表路径必须以 .base 结尾。");
-        return;
-      }
-      const documentFolders = { task: settings.taskFolder, project: settings.projectFolder, fleeting: settings.inboxFolder, literature: settings.literatureFolder, permanent: settings.permanentFolder };
-      const folderValidation = validateWorkbenchDocumentFolders(documentFolders);
-      if (!folderValidation.ok) {
-        showNotice(folderValidation.error);
         return;
       }
       const templates = workbenchDocumentTemplates(settings);
@@ -9045,7 +9046,7 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
         showNotice(templateSetup.conflicts.some((conflict) => conflict.reason === "duplicate-path") ? "文档模板路径不能重复。" : "文档模板路径当前是一个文件夹，请换一个 .md 文件路径。");
         return;
       }
-      const folders = [settings.inboxFolder, settings.literatureFolder, settings.permanentFolder, settings.taskFolder, settings.projectFolder, "目标与任务/任务管理/每日进展"];
+      const folders = [settings.inboxFolder, settings.literatureFolder, settings.permanentFolder, settings.projectFolder];
       for (const folder of folders) await ensureVaultFolder(this.app.vault, folder);
       for (const template of templateSetup.creations) {
         await ensureVaultFolder(this.app.vault, template.path.split("/").slice(0, -1).join("/"));
@@ -9091,7 +9092,6 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
     });
     new Setting(containerEl).setName("第 2 步：确认任务和项目如何保存").setDesc("任务与项目各有自己的默认目录；五个文档目录必须互不重叠。").setHeading();
     const taskSection = containerEl.createDiv({ cls: "pvd-settings-section" });
-    new Setting(taskSection).setName("任务目录").setDesc("新建任务保存在这里，插件也只从这里读取符合字段规则的任务。").addText((text) => text.setValue(value("taskFolder")).setPlaceholder(defaults.taskFolder).onChange((next) => saveDocumentFolder("taskFolder", next)));
     new Setting(taskSection).setName("项目目录").setDesc("每个项目工作区会在这里创建项目文档与其子任务目录。").addText((text) => text.setValue(value("projectFolder")).setPlaceholder(defaults.projectFolder).onChange((next) => saveDocumentFolder("projectFolder", next)));
     new Setting(containerEl).setName("第 3 步：理解模板和任务总表").setDesc("模板决定新任务笔记的内容；任务总表只是额外的表格视图，两者用途不同。").setHeading();
     const assets = containerEl.createDiv({ cls: "pvd-settings-assets" });

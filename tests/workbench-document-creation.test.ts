@@ -10,10 +10,10 @@ const folders = {
 } as const;
 
 describe("planWorkbenchDocumentCreation", () => {
-  it("plans an independent task in the Workbench task root", () => {
-    expect(planWorkbenchDocumentCreation({ type: "task", title: "整理周报", folders, occupiedPaths: [] })).toEqual({
+  it("plans a task inside its parent project workspace", () => {
+    expect(planWorkbenchDocumentCreation({ type: "task", title: "整理周报", folders, projectWorkspace: "Omni Workbench/项目/发布准备", occupiedPaths: [] })).toEqual({
       ok: true,
-      plan: { directories: ["Omni Workbench/任务"], documentPath: "Omni Workbench/任务/整理周报.md" },
+      plan: { directories: ["Omni Workbench/项目/发布准备/任务"], documentPath: "Omni Workbench/项目/发布准备/任务/整理周报.md" },
     });
   });
 
