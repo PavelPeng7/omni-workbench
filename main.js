@@ -108,27 +108,6 @@ ${template.sections}
 `
   }));
 }
-function planKnowledgeNoteTemplateSetup(input) {
-  var _a;
-  const duplicatePaths = /* @__PURE__ */ new Set();
-  const seenPaths = /* @__PURE__ */ new Set();
-  for (const template of input.templates) {
-    if (seenPaths.has(template.path)) duplicatePaths.add(template.path);
-    seenPaths.add(template.path);
-  }
-  const creations = [];
-  const conflicts = [];
-  for (const template of input.templates) {
-    if (duplicatePaths.has(template.path)) {
-      conflicts.push({ type: template.type, path: template.path, reason: "duplicate-path" });
-      continue;
-    }
-    const entry = (_a = input.existingEntries[template.path]) != null ? _a : "missing";
-    if (entry === "missing") creations.push(template);
-    if (entry === "folder") conflicts.push({ type: template.type, path: template.path, reason: "folder" });
-  }
-  return { creations, conflicts };
-}
 
 // node_modules/yaml/browser/dist/nodes/identity.js
 var ALIAS = /* @__PURE__ */ Symbol.for("yaml.alias");
@@ -6496,18 +6475,59 @@ ${stringify3(merged).replace(/\s+$/, "")}
 ${body}` } };
 }
 
+// src/core/workbench-document-model.ts
+var folderError = "Workbench document folders must be configured, unique, and non-overlapping.";
+function normalizePath(path) {
+  return path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+}
+function isWithinFolder(path, folder) {
+  return path === folder || path.startsWith(`${folder}/`);
+}
+function validateWorkbenchDocumentFolders(folders) {
+  const paths = Object.values(folders).map(normalizePath);
+  if (paths.some((path) => !path) || new Set(paths).size !== paths.length) return { ok: false, error: folderError };
+  if (paths.some((path, index) => paths.some((other, otherIndex) => index !== otherIndex && isWithinFolder(path, other)))) {
+    return { ok: false, error: folderError };
+  }
+  return { ok: true };
+}
+
+// src/core/workbench-document-templates.ts
+function planWorkbenchDocumentTemplateSetup(input) {
+  var _a;
+  const duplicatePaths = /* @__PURE__ */ new Set();
+  const seenPaths = /* @__PURE__ */ new Set();
+  for (const template of input.templates) {
+    if (seenPaths.has(template.path)) duplicatePaths.add(template.path);
+    seenPaths.add(template.path);
+  }
+  const creations = [];
+  const conflicts = [];
+  for (const template of input.templates) {
+    if (duplicatePaths.has(template.path)) {
+      conflicts.push({ type: template.type, path: template.path, reason: "duplicate-path" });
+      continue;
+    }
+    const entry = (_a = input.existingEntries[template.path]) != null ? _a : "missing";
+    if (entry === "missing") creations.push(template);
+    if (entry === "folder") conflicts.push({ type: template.type, path: template.path, reason: "folder" });
+  }
+  return { creations, conflicts };
+}
+
 // src/main.ts
-var { ItemView, Menu, Modal, Notice, Plugin, PluginSettingTab, Setting, normalizePath } = require("obsidian");
+var { ItemView, Menu, Modal, Notice, Plugin, PluginSettingTab, Setting, normalizePath: normalizePath2 } = require("obsidian");
 var VIEW_TYPE = "focus-workbench-view";
 var DEFAULT_SETTINGS = {
   language: "zh-CN",
   taskBasePath: "目标与任务/任务总表.base",
-  taskFolder: "",
-  projectFolder: "",
-  inboxFolder: "",
-  literatureFolder: "",
-  permanentFolder: "",
+  taskFolder: "Omni Workbench/任务",
+  projectFolder: "Omni Workbench/项目",
+  inboxFolder: "Omni Workbench/闪念笔记",
+  literatureFolder: "Omni Workbench/文献笔记",
+  permanentFolder: "Omni Workbench/永久笔记",
   taskTemplatePath: "模板/任务模板.md",
+  projectTemplatePath: "模板/项目模板.md",
   ...knowledgeNoteTemplateDefaults(),
   schema: {
     typeField: "type",
@@ -8848,11 +8868,21 @@ ${schema4.completedAtField}:
 - [ ]
 `;
 }
+function starterProjectTemplate() {
+  return "---\ntype: 项目\n状态: 进行中\n创建日期: \n---\n\n# 新项目\n\n## 目标\n\n\n## 完成标准\n\n- [ ] \n";
+}
 function knowledgeNoteTemplates(settings) {
   return configuredKnowledgeNoteTemplates(settings);
 }
+function workbenchDocumentTemplates(settings) {
+  return [
+    { type: "task", path: settings.taskTemplatePath, content: starterTaskTemplate(Object.assign({}, DEFAULT_SETTINGS.schema, settings.schema || {})) },
+    { type: "project", path: settings.projectTemplatePath, content: starterProjectTemplate() },
+    ...knowledgeNoteTemplates(settings)
+  ];
+}
 function normalizeVaultPath(value) {
-  return normalizePath(String(value || "").trim()).replace(/\/$/, "");
+  return normalizePath2(String(value || "").trim()).replace(/\/$/, "");
 }
 async function ensureVaultFolder(vault, folder) {
   let current = "";
@@ -8880,12 +8910,13 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
     }));
     languageSetting.settingEl.addClass("pvd-language-setting");
     const defaults = {
-      inboxFolder: "闪念笔记",
-      literatureFolder: "文献笔记",
-      permanentFolder: "永久笔记",
-      taskFolder: "目标与任务/任务管理/任务",
-      projectFolder: "目标与任务/任务管理/项目",
+      inboxFolder: "Omni Workbench/闪念笔记",
+      literatureFolder: "Omni Workbench/文献笔记",
+      permanentFolder: "Omni Workbench/永久笔记",
+      taskFolder: "Omni Workbench/任务",
+      projectFolder: "Omni Workbench/项目",
       taskTemplatePath: "模板/任务模板.md",
+      projectTemplatePath: "模板/项目模板.md",
       ...knowledgeNoteTemplateDefaults(),
       taskBasePath: "目标与任务/任务总表.base"
     };
@@ -8896,39 +8927,59 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
       return Boolean((_a = entry(path)) == null ? void 0 : _a.children);
     };
     const fileExists = (path) => Boolean(entry(path) && !entry(path).children);
+    const saveDocumentFolder = async (key, next) => {
+      const path = normalizeVaultPath(next);
+      const candidate = {
+        task: key === "taskFolder" ? path : value("taskFolder"),
+        project: key === "projectFolder" ? path : value("projectFolder"),
+        fleeting: key === "inboxFolder" ? path : value("inboxFolder"),
+        literature: key === "literatureFolder" ? path : value("literatureFolder"),
+        permanent: key === "permanentFolder" ? path : value("permanentFolder")
+      };
+      const validation = validateWorkbenchDocumentFolders(candidate);
+      if (!validation.ok) {
+        showNotice(validation.error);
+        return;
+      }
+      settings[key] = path;
+      await this.plugin.saveSettings();
+    };
     const folderReady = ["inboxFolder", "literatureFolder", "permanentFolder", "taskFolder", "projectFolder"].every((key) => folderExists(value(key))) && folderExists("目标与任务/任务管理/每日进展");
+    const templatePathKeys = { task: "taskTemplatePath", project: "projectTemplatePath", fleeting: "fleetingNoteTemplatePath", literature: "literatureNoteTemplatePath", permanent: "permanentNoteTemplatePath" };
     const taskTemplateReady = fileExists(value("taskTemplatePath"));
-    const knowledgeTemplatesReady = knowledgeNoteTemplateDefinitions.every((template) => fileExists(value(template.pathKey)));
-    const templateReady = taskTemplateReady && knowledgeTemplatesReady;
+    const documentTemplatesReady = workbenchDocumentTemplates(settings).every((template) => fileExists(value(templatePathKeys[template.type])));
+    const templateReady = documentTemplatesReady;
     const baseReady = fileExists(value("taskBasePath"));
     const readyCount = [folderReady, templateReady, baseReady].filter(Boolean).length;
     const hero = containerEl.createDiv({ cls: "pvd-onboarding-hero" });
     const heroCopy = hero.createDiv({ cls: "pvd-onboarding-hero-copy" });
     heroCopy.createEl("p", { cls: "pvd-onboarding-kicker", text: "首次使用 · 约 1 分钟" });
     heroCopy.createEl("strong", { cls: "pvd-onboarding-title", text: "先搭好工作区，再开始记录" });
-    heroCopy.createEl("p", { text: "推荐初始化会创建任务系统、任务与知识笔记模板、任务总表和三类知识文件夹。已有文件只会保留，不会覆盖或移动。" });
+    heroCopy.createEl("p", { text: "推荐初始化会创建五类文档目录、五类模板、任务总表和每日进展目录。已有文件只会保留，不会覆盖或移动。" });
     const progress = hero.createDiv({ cls: "pvd-onboarding-progress", attr: { role: "status", "aria-label": `初始化进度：完成 ${readyCount}/3` } });
     progress.createEl("strong", { text: `${readyCount}/3` });
     progress.createSpan({ text: readyCount === 3 ? "准备完成" : "项已就绪" });
-    new Setting(hero).setName(readyCount === 3 ? "推荐结构已准备好" : "自动创建推荐结构").setDesc("包括 3 个知识目录、任务、项目与每日进展目录，以及任务与三类知识笔记模板和 Obsidian Bases 任务总表；可以重复执行，已有内容不会被改写。").addButton((button) => button.setButtonText(readyCount === 3 ? "检查并补齐" : "一键初始化").setCta().onClick(() => new ConfirmModal(this.app, "初始化推荐工作区", "将补齐三类知识文件夹、任务与项目目录、任务与三类知识笔记模板和任务总表。已有文件不会被覆盖，是否继续？", "开始初始化", async () => {
-      var _a, _b;
+    new Setting(hero).setName(readyCount === 3 ? "推荐结构已准备好" : "自动创建推荐结构").setDesc("包括五类文档目录、五类模板、每日进展目录和 Obsidian Bases 任务总表；可以重复执行，已有内容不会被改写。").addButton((button) => button.setButtonText(readyCount === 3 ? "检查并补齐" : "一键初始化").setCta().onClick(() => new ConfirmModal(this.app, "初始化推荐工作区", "将补齐五类文档目录、五类模板和任务总表。已有文件不会被覆盖，是否继续？", "开始初始化", async () => {
+      var _a;
       Object.entries(defaults).forEach(([key, path]) => {
         if (!settings[key]) settings[key] = path;
       });
-      if (!settings.taskTemplatePath.endsWith(".md")) {
-        showNotice("任务模板路径必须以 .md 结尾。");
-        return;
-      }
-      if (knowledgeNoteTemplates(settings).some((template) => !template.path.endsWith(".md"))) {
-        showNotice("知识笔记模板路径必须以 .md 结尾。");
+      if (workbenchDocumentTemplates(settings).some((template) => !template.path.endsWith(".md"))) {
+        showNotice("文档模板路径必须以 .md 结尾。");
         return;
       }
       if (!settings.taskBasePath.endsWith(".base")) {
         showNotice("任务总表路径必须以 .base 结尾。");
         return;
       }
-      const templates = knowledgeNoteTemplates(settings);
-      const templateSetup = planKnowledgeNoteTemplateSetup({
+      const documentFolders = { task: settings.taskFolder, project: settings.projectFolder, fleeting: settings.inboxFolder, literature: settings.literatureFolder, permanent: settings.permanentFolder };
+      const folderValidation = validateWorkbenchDocumentFolders(documentFolders);
+      if (!folderValidation.ok) {
+        showNotice(folderValidation.error);
+        return;
+      }
+      const templates = workbenchDocumentTemplates(settings);
+      const templateSetup = planWorkbenchDocumentTemplateSetup({
         templates,
         existingEntries: Object.fromEntries(templates.map((template) => {
           const existing = this.app.vault.getAbstractFileByPath(template.path);
@@ -8936,25 +8987,18 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
         }))
       });
       if (templateSetup.conflicts.length) {
-        showNotice(templateSetup.conflicts.some((conflict) => conflict.reason === "duplicate-path") ? "知识笔记模板路径不能重复。" : "知识笔记模板路径当前是一个文件夹，请换一个 .md 文件路径。");
+        showNotice(templateSetup.conflicts.some((conflict) => conflict.reason === "duplicate-path") ? "文档模板路径不能重复。" : "文档模板路径当前是一个文件夹，请换一个 .md 文件路径。");
         return;
       }
       const folders = [settings.inboxFolder, settings.literatureFolder, settings.permanentFolder, settings.taskFolder, settings.projectFolder, "目标与任务/任务管理/每日进展"];
       for (const folder of folders) await ensureVaultFolder(this.app.vault, folder);
-      const templatePath = settings.taskTemplatePath;
-      await ensureVaultFolder(this.app.vault, templatePath.split("/").slice(0, -1).join("/"));
-      if ((_a = this.app.vault.getAbstractFileByPath(templatePath)) == null ? void 0 : _a.children) {
-        showNotice("任务模板路径当前是一个文件夹，请换一个 .md 文件路径。");
-        return;
-      }
-      if (!this.app.vault.getAbstractFileByPath(templatePath)) await this.app.vault.create(templatePath, starterTaskTemplate(Object.assign({}, DEFAULT_SETTINGS.schema, settings.schema || {})));
       for (const template of templateSetup.creations) {
         await ensureVaultFolder(this.app.vault, template.path.split("/").slice(0, -1).join("/"));
         await this.app.vault.create(template.path, template.content);
       }
       const basePath = settings.taskBasePath;
       await ensureVaultFolder(this.app.vault, basePath.split("/").slice(0, -1).join("/"));
-      if ((_b = this.app.vault.getAbstractFileByPath(basePath)) == null ? void 0 : _b.children) {
+      if ((_a = this.app.vault.getAbstractFileByPath(basePath)) == null ? void 0 : _a.children) {
         showNotice("任务总表路径当前是一个文件夹，请换一个 .base 文件路径。");
         return;
       }
@@ -8988,28 +9032,23 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
       head.createSpan({ text: stage });
       card.createEl("p", { text: description });
       card.createEl("small", { text: example });
-      new Setting(card).setName("保存位置").setDesc(folderExists(value(key)) ? "目录已存在" : "初始化时会自动创建").addText((text) => text.setValue(value(key)).setPlaceholder(defaults[key]).onChange(async (next) => {
-        settings[key] = normalizeVaultPath(next);
-        await this.plugin.saveSettings();
-      }));
+      new Setting(card).setName("保存位置").setDesc(folderExists(value(key)) ? "目录已存在" : "初始化时会自动创建").addText((text) => text.setValue(value(key)).setPlaceholder(defaults[key]).onChange((next) => saveDocumentFolder(key, next)));
     });
-    new Setting(containerEl).setName("第 2 步：确认任务如何保存").setDesc("任务目录是插件读取任务的来源；项目目录用于任务编辑器的项目选项。").setHeading();
+    new Setting(containerEl).setName("第 2 步：确认任务和项目如何保存").setDesc("任务与项目各有自己的默认目录；五个文档目录必须互不重叠。").setHeading();
     const taskSection = containerEl.createDiv({ cls: "pvd-settings-section" });
-    new Setting(taskSection).setName("任务目录").setDesc("新建任务保存在这里，插件也只从这里读取符合字段规则的任务。").addText((text) => text.setValue(value("taskFolder")).setPlaceholder(defaults.taskFolder).onChange(async (next) => {
-      settings.taskFolder = normalizeVaultPath(next);
-      await this.plugin.saveSettings();
-    }));
-    new Setting(taskSection).setName("项目目录").setDesc("此目录中的笔记会出现在任务的“所属项目”下拉菜单中。").addText((text) => text.setValue(value("projectFolder")).setPlaceholder(defaults.projectFolder).onChange(async (next) => {
-      settings.projectFolder = normalizeVaultPath(next);
-      await this.plugin.saveSettings();
-    }));
+    new Setting(taskSection).setName("任务目录").setDesc("新建任务保存在这里，插件也只从这里读取符合字段规则的任务。").addText((text) => text.setValue(value("taskFolder")).setPlaceholder(defaults.taskFolder).onChange((next) => saveDocumentFolder("taskFolder", next)));
+    new Setting(taskSection).setName("项目目录").setDesc("每个项目工作区会在这里创建项目文档与其子任务目录。").addText((text) => text.setValue(value("projectFolder")).setPlaceholder(defaults.projectFolder).onChange((next) => saveDocumentFolder("projectFolder", next)));
     new Setting(containerEl).setName("第 3 步：理解模板和任务总表").setDesc("模板决定新任务笔记的内容；任务总表只是额外的表格视图，两者用途不同。").setHeading();
     const assets = containerEl.createDiv({ cls: "pvd-settings-assets" });
     const templateCard = assets.createDiv({ cls: "pvd-settings-asset-card" });
-    templateCard.createEl("strong", { text: "任务模板 · 决定新任务长什么样" });
-    templateCard.createEl("p", { text: "每次在工作台点击“新建任务”时使用。插件会自动写入计划日期、创建日期和任务标题。模板不存在时仍可使用内置格式。" });
+    templateCard.createEl("strong", { text: "任务与项目模板 · 定义执行文档格式" });
+    templateCard.createEl("p", { text: "每种执行文档都有独立模板。初始化只会创建缺失模板，绝不会覆盖你已有的内容。" });
     new Setting(templateCard).setName(taskTemplateReady ? "模板已找到" : "等待初始化").setDesc(value("taskTemplatePath")).addText((text) => text.setValue(value("taskTemplatePath")).setPlaceholder(defaults.taskTemplatePath).onChange(async (next) => {
       settings.taskTemplatePath = normalizeVaultPath(next);
+      await this.plugin.saveSettings();
+    }));
+    new Setting(templateCard).setName(fileExists(value("projectTemplatePath")) ? "模板已找到" : "等待初始化").setDesc(value("projectTemplatePath")).addText((text) => text.setValue(value("projectTemplatePath")).setPlaceholder(defaults.projectTemplatePath).onChange(async (next) => {
+      settings.projectTemplatePath = normalizeVaultPath(next);
       await this.plugin.saveSettings();
     }));
     const knowledgeTemplateCard = assets.createDiv({ cls: "pvd-settings-asset-card" });
