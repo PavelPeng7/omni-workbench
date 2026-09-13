@@ -1057,10 +1057,15 @@ class FocusWorkbenchView extends ItemView {
     for (const [type, folder] of Object.entries(folders)) if (file.path.startsWith(`${folder.replace(/\/$/, "")}/`)) return type;
     return ({ "闪念笔记": "fleeting", "文献笔记": "literature", "永久笔记": "permanent" })[this.meta(file).type] || null;
   }
+  confirmKnowledgeConversion(file, target) {
+    const folder = ({ fleeting: this.config().inbox, literature: this.config().literature, permanent: this.config().permanent })[target.type] || "";
+    const destination = `${folder.replace(/\/$/, "")}/${file.name}`;
+    new ConfirmModal(this.app, "转换为笔记类型", `将“${file.path}”转换为${target.title}并移动到“${destination}”？`, "开始转换", () => this.convertNoteToType(file, target.type)).open();
+  }
   openKnowledgeContextMenu(event, file) {
     const menu = new Menu(); const current = this.knowledgeNoteType(file);
     if (current === "fleeting") menu.addItem(item => item.setTitle(translateUiText("编辑闪念", this.plugin.settings.language)).setIcon("pencil").onClick(() => this.editIdea(file)));
-    menu.addItem(item => { item.setTitle(translateUiText("转换为笔记类型", this.plugin.settings.language)).setIcon("shuffle"); const submenu = item.setSubmenu(); knowledgeNoteTemplateDefinitions.filter(target => target.type !== current).forEach(target => submenu.addItem(targetItem => targetItem.setTitle(translateUiText(target.title, this.plugin.settings.language)).onClick(() => this.convertNoteToType(file, target.type)))); });
+    menu.addItem(item => { item.setTitle(translateUiText("转换为笔记类型", this.plugin.settings.language)).setIcon("shuffle"); const submenu = item.setSubmenu(); knowledgeNoteTemplateDefinitions.filter(target => target.type !== current).forEach(target => submenu.addItem(targetItem => targetItem.setTitle(translateUiText(target.title, this.plugin.settings.language)).onClick(() => this.confirmKnowledgeConversion(file, target)))); });
     if (event instanceof MouseEvent) menu.showAtMouseEvent(event); else menu.showAtPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
   }
   async convertIdeaToNote(file, kind) { return this.convertNoteToType(file, kind); }
