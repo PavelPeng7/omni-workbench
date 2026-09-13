@@ -5,7 +5,7 @@ import { setFrontmatterField } from "./core/frontmatter";
 import { configuredKnowledgeNoteTemplates, knowledgeNoteTemplateDefaults, knowledgeNoteTemplateDefinitions, planKnowledgeNoteTemplateSetup } from "./core/knowledge-templates";
 import { planNoteConversion } from "./core/note-conversion";
 
-const { ItemView, Modal, Notice, Plugin, PluginSettingTab, Setting, normalizePath } = require("obsidian");
+const { ItemView, Menu, Modal, Notice, Plugin, PluginSettingTab, Setting, normalizePath } = require("obsidian");
 
 const VIEW_TYPE = "focus-workbench-view";
 const DEFAULT_SETTINGS = {
@@ -679,7 +679,7 @@ class FocusWorkbenchView extends ItemView {
       const section = parent.createEl("section", { cls: "pvd-card pvd-article-group" }); const notes = this.knowledgeNotes(group).filter(file => !query || file.basename.toLocaleLowerCase().includes(query));
       const head = section.createDiv({ cls: "pvd-section-head" }); const copy = head.createDiv(); copy.createEl("h2", { text: group.name }); copy.createEl("p", { text: `${group.description} · ${notes.length} 篇` });
       if (!notes.length) { section.createEl("p", { text: "暂无匹配文章。" }); return; }
-      const list = section.createDiv({ cls: "pvd-article-list" }); notes.slice(0, 60).forEach(file => { const article = this.button(list, "", () => this.openFile(file), "pvd-article"); const text = article.createDiv(); text.createEl("strong", { text: file.basename }); text.createSpan({ text: this.dateKey(new Date(file.stat.mtime)) }); article.createEl("span", { text: group.key === "fleeting" ? "右键编辑" : "打开 →", cls: "pvd-article-open" }); if (group.key === "fleeting") this.bindContextEditor(article, file, () => this.editIdea(file), `闪念：${this.ideaTitle(file)}`); });
+      const list = section.createDiv({ cls: "pvd-article-list" }); notes.slice(0, 60).forEach(file => { const article = this.button(list, "", () => this.openFile(file), "pvd-article"); const text = article.createDiv(); text.createEl("strong", { text: file.basename }); text.createSpan({ text: this.dateKey(new Date(file.stat.mtime)) }); article.createEl("span", { text: "右键转换 · 打开 →", cls: "pvd-article-open" }); article.addEventListener("contextmenu", event => { event.preventDefault(); event.stopPropagation(); this.openKnowledgeContextMenu(event, file); }); article.addEventListener("keydown", event => { if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); this.openKnowledgeContextMenu(event, file); } }); });
     });
     localizeElement(parent, this.plugin.settings.language);
   }
@@ -1051,6 +1051,17 @@ class FocusWorkbenchView extends ItemView {
     }
     if (linkedTask && result.plan.destinationPath !== previousPath) await this.replaceTaskIdeaLink(linkedTask, previousPath, result.plan.destinationPath);
     showNotice(`已转为${target.title}：${result.plan.destinationPath}`); await this.render();
+  }
+  knowledgeNoteType(file) {
+    const folders = { fleeting: this.config().inbox, literature: this.config().literature, permanent: this.config().permanent };
+    for (const [type, folder] of Object.entries(folders)) if (file.path.startsWith(`${folder.replace(/\/$/, "")}/`)) return type;
+    return ({ "闪念笔记": "fleeting", "文献笔记": "literature", "永久笔记": "permanent" })[this.meta(file).type] || null;
+  }
+  openKnowledgeContextMenu(event, file) {
+    const menu = new Menu(); const current = this.knowledgeNoteType(file);
+    if (current === "fleeting") menu.addItem(item => item.setTitle(translateUiText("编辑闪念", this.plugin.settings.language)).setIcon("pencil").onClick(() => this.editIdea(file)));
+    menu.addItem(item => { item.setTitle(translateUiText("转换为笔记类型", this.plugin.settings.language)).setIcon("shuffle"); const submenu = item.setSubmenu(); knowledgeNoteTemplateDefinitions.filter(target => target.type !== current).forEach(target => submenu.addItem(targetItem => targetItem.setTitle(translateUiText(target.title, this.plugin.settings.language)).onClick(() => this.convertNoteToType(file, target.type)))); });
+    if (event instanceof MouseEvent) menu.showAtMouseEvent(event); else menu.showAtPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
   }
   async convertIdeaToNote(file, kind) { return this.convertNoteToType(file, kind); }
   discardIdea(file) { new ConfirmModal(this.app, "舍弃闪念", `将“${this.ideaTitle(file)}”移入 Obsidian 回收站，并清理任务中的关联？`, "舍弃", async () => { const linkedTask = this.ideaLinkedTask(file); await this.replaceTaskIdeaLink(linkedTask, file.path); await this.app.fileManager.trashFile(file); showNotice("闪念已移入回收站，任务关联已清理"); await this.render(); }).open(); }

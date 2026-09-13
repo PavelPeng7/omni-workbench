@@ -6497,7 +6497,7 @@ ${body}` } };
 }
 
 // src/main.ts
-var { ItemView, Modal, Notice, Plugin, PluginSettingTab, Setting, normalizePath } = require("obsidian");
+var { ItemView, Menu, Modal, Notice, Plugin, PluginSettingTab, Setting, normalizePath } = require("obsidian");
 var VIEW_TYPE = "focus-workbench-view";
 var DEFAULT_SETTINGS = {
   language: "zh-CN",
@@ -7856,8 +7856,18 @@ var FocusWorkbenchView = class extends ItemView {
         const text = article.createDiv();
         text.createEl("strong", { text: file.basename });
         text.createSpan({ text: this.dateKey(new Date(file.stat.mtime)) });
-        article.createEl("span", { text: group.key === "fleeting" ? "右键编辑" : "打开 →", cls: "pvd-article-open" });
-        if (group.key === "fleeting") this.bindContextEditor(article, file, () => this.editIdea(file), `闪念：${this.ideaTitle(file)}`);
+        article.createEl("span", { text: "右键转换 · 打开 →", cls: "pvd-article-open" });
+        article.addEventListener("contextmenu", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          this.openKnowledgeContextMenu(event, file);
+        });
+        article.addEventListener("keydown", (event) => {
+          if (event.key === "ContextMenu" || event.shiftKey && event.key === "F10") {
+            event.preventDefault();
+            this.openKnowledgeContextMenu(event, file);
+          }
+        });
       });
     });
     localizeElement(parent, this.plugin.settings.language);
@@ -8586,6 +8596,23 @@ date: ${this.dateKey()}
     if (linkedTask && result.plan.destinationPath !== previousPath) await this.replaceTaskIdeaLink(linkedTask, previousPath, result.plan.destinationPath);
     showNotice(`已转为${target.title}：${result.plan.destinationPath}`);
     await this.render();
+  }
+  knowledgeNoteType(file) {
+    const folders = { fleeting: this.config().inbox, literature: this.config().literature, permanent: this.config().permanent };
+    for (const [type, folder] of Object.entries(folders)) if (file.path.startsWith(`${folder.replace(/\/$/, "")}/`)) return type;
+    return { "闪念笔记": "fleeting", "文献笔记": "literature", "永久笔记": "permanent" }[this.meta(file).type] || null;
+  }
+  openKnowledgeContextMenu(event, file) {
+    const menu = new Menu();
+    const current = this.knowledgeNoteType(file);
+    if (current === "fleeting") menu.addItem((item) => item.setTitle(translateUiText("编辑闪念", this.plugin.settings.language)).setIcon("pencil").onClick(() => this.editIdea(file)));
+    menu.addItem((item) => {
+      item.setTitle(translateUiText("转换为笔记类型", this.plugin.settings.language)).setIcon("shuffle");
+      const submenu = item.setSubmenu();
+      knowledgeNoteTemplateDefinitions.filter((target) => target.type !== current).forEach((target) => submenu.addItem((targetItem) => targetItem.setTitle(translateUiText(target.title, this.plugin.settings.language)).onClick(() => this.convertNoteToType(file, target.type))));
+    });
+    if (event instanceof MouseEvent) menu.showAtMouseEvent(event);
+    else menu.showAtPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
   }
   async convertIdeaToNote(file, kind) {
     return this.convertNoteToType(file, kind);
