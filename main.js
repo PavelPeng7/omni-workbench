@@ -80,6 +80,56 @@ ${field}: ${value}
   );
 }
 
+// src/core/knowledge-templates.ts
+var knowledgeNoteTemplateDefinitions = [
+  { type: "fleeting", pathKey: "fleetingNoteTemplatePath", defaultPath: "模板/闪念笔记模板.md", label: "闪念笔记模板", typeValue: "闪念笔记", workflowStatus: "收集", title: "闪念笔记", sections: "## 想法\n\n{{content}}\n\n## 后续整理\n\n- [ ] 补充上下文" },
+  { type: "literature", pathKey: "literatureNoteTemplatePath", defaultPath: "模板/文献笔记模板.md", label: "文献笔记模板", typeValue: "文献笔记", workflowStatus: "待整理", title: "文献笔记", sections: "## 来源\n\n\n## 摘录与理解\n\n{{content}}" },
+  { type: "permanent", pathKey: "permanentNoteTemplatePath", defaultPath: "模板/永久笔记模板.md", label: "永久笔记模板", typeValue: "永久笔记", workflowStatus: "已沉淀", title: "永久笔记", sections: "## 核心观点\n\n{{content}}\n\n## 关联\n\n" }
+];
+function knowledgeNoteTemplateDefaults() {
+  return knowledgeNoteTemplateDefinitions.reduce((defaults, template) => {
+    defaults[template.pathKey] = template.defaultPath;
+    return defaults;
+  }, {});
+}
+function configuredKnowledgeNoteTemplates(paths) {
+  return knowledgeNoteTemplateDefinitions.map((template) => ({
+    type: template.type,
+    path: paths[template.pathKey],
+    content: `---
+type: ${template.typeValue}
+状态: ${template.workflowStatus}
+创建日期:
+---
+
+# ${template.title}
+
+${template.sections}
+`
+  }));
+}
+function planKnowledgeNoteTemplateSetup(input) {
+  var _a;
+  const duplicatePaths = /* @__PURE__ */ new Set();
+  const seenPaths = /* @__PURE__ */ new Set();
+  for (const template of input.templates) {
+    if (seenPaths.has(template.path)) duplicatePaths.add(template.path);
+    seenPaths.add(template.path);
+  }
+  const creations = [];
+  const conflicts = [];
+  for (const template of input.templates) {
+    if (duplicatePaths.has(template.path)) {
+      conflicts.push({ type: template.type, path: template.path, reason: "duplicate-path" });
+      continue;
+    }
+    const entry = (_a = input.existingEntries[template.path]) != null ? _a : "missing";
+    if (entry === "missing") creations.push(template);
+    if (entry === "folder") conflicts.push({ type: template.type, path: template.path, reason: "folder" });
+  }
+  return { creations, conflicts };
+}
+
 // src/main.ts
 var { ItemView, Modal, Notice, Plugin, PluginSettingTab, Setting, normalizePath } = require("obsidian");
 var VIEW_TYPE = "focus-workbench-view";
@@ -92,6 +142,7 @@ var DEFAULT_SETTINGS = {
   literatureFolder: "",
   permanentFolder: "",
   taskTemplatePath: "模板/任务模板.md",
+  ...knowledgeNoteTemplateDefaults(),
   schema: {
     typeField: "type",
     typeValue: "任务",
@@ -349,10 +400,22 @@ var UI_TEXT_EN = {
   "标题不能以句点或空格结尾。": "The title cannot end with a period or space.",
   "该标题是 Windows 保留文件名。": "This title is a reserved Windows filename.",
   "任务模板路径必须以 .md 结尾。": "The task template path must end in .md.",
+  "知识笔记模板路径必须以 .md 结尾。": "A knowledge-note template path must end in .md.",
+  "知识笔记模板路径不能重复。": "Knowledge-note template paths must be unique.",
   "任务总表路径必须以 .base 结尾。": "The task table path must end in .base.",
   "任务模板路径当前是一个文件夹，请换一个 .md 文件路径。": "The task template path points to a folder. Choose an .md file path.",
+  "知识笔记模板路径当前是一个文件夹，请换一个 .md 文件路径。": "A knowledge-note template path points to a folder. Choose an .md file path.",
   "任务总表路径当前是一个文件夹，请换一个 .base 文件路径。": "The task table path points to a folder. Choose a .base file path.",
   "推荐工作区已准备好，可以打开 Omni Workbench 开始使用。": "The recommended workspace is ready. Open Omni Workbench to get started.",
+  "推荐初始化会创建任务系统、任务与知识笔记模板、任务总表和三类知识文件夹。已有文件只会保留，不会覆盖或移动。": "Recommended setup creates the task system, task and knowledge-note templates, task table, and three knowledge folders. Existing files are preserved without overwriting or moving them.",
+  "包括 3 个知识目录、任务、项目与每日进展目录，以及任务与三类知识笔记模板和 Obsidian Bases 任务总表；可以重复执行，已有内容不会被改写。": "Includes three knowledge folders; task, project, and daily-progress folders; task and three knowledge-note templates; and an Obsidian Bases task table. It is safe to run again.",
+  "将补齐三类知识文件夹、任务与项目目录、任务与三类知识笔记模板和任务总表。已有文件不会被覆盖，是否继续？": "This will add the three knowledge folders; task and project folders; task and three knowledge-note templates; and the task table. Existing files will not be overwritten. Continue?",
+  "三类知识笔记模板 · 定义转换后的笔记格式": "Three knowledge-note templates · Define converted note formats",
+  "每种知识笔记类型都有独立模板。转换功能会保留原笔记内容，并将它放入模板中的 {{content}} 位置。": "Each knowledge-note type has its own template. Conversion preserves the original note body and places it at {{content}}.",
+  "闪念笔记模板": "Fleeting-note template",
+  "文献笔记模板": "Literature-note template",
+  "永久笔记模板": "Permanent-note template",
+  "知识模板已找到": "Knowledge-note template found",
   "项任务": "tasks",
   "已选择": "Selected",
   "全选": "Select all",
@@ -2351,6 +2414,9 @@ ${schema.completedAtField}:
 - [ ]
 `;
 }
+function knowledgeNoteTemplates(settings) {
+  return configuredKnowledgeNoteTemplates(settings);
+}
 function normalizeVaultPath(value) {
   return normalizePath(String(value || "").trim()).replace(/\/$/, "");
 }
@@ -2386,6 +2452,7 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
       taskFolder: "目标与任务/任务管理/任务",
       projectFolder: "目标与任务/任务管理/项目",
       taskTemplatePath: "模板/任务模板.md",
+      ...knowledgeNoteTemplateDefaults(),
       taskBasePath: "目标与任务/任务总表.base"
     };
     const value = (key) => settings[key] || defaults[key];
@@ -2396,18 +2463,20 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
     };
     const fileExists = (path) => Boolean(entry(path) && !entry(path).children);
     const folderReady = ["inboxFolder", "literatureFolder", "permanentFolder", "taskFolder", "projectFolder"].every((key) => folderExists(value(key))) && folderExists("目标与任务/任务管理/每日进展");
-    const templateReady = fileExists(value("taskTemplatePath"));
+    const taskTemplateReady = fileExists(value("taskTemplatePath"));
+    const knowledgeTemplatesReady = knowledgeNoteTemplateDefinitions.every((template) => fileExists(value(template.pathKey)));
+    const templateReady = taskTemplateReady && knowledgeTemplatesReady;
     const baseReady = fileExists(value("taskBasePath"));
     const readyCount = [folderReady, templateReady, baseReady].filter(Boolean).length;
     const hero = containerEl.createDiv({ cls: "pvd-onboarding-hero" });
     const heroCopy = hero.createDiv({ cls: "pvd-onboarding-hero-copy" });
     heroCopy.createEl("p", { cls: "pvd-onboarding-kicker", text: "首次使用 · 约 1 分钟" });
     heroCopy.createEl("strong", { cls: "pvd-onboarding-title", text: "先搭好工作区，再开始记录" });
-    heroCopy.createEl("p", { text: "推荐初始化会创建任务系统、任务模板、任务总表和三类知识文件夹。已有文件只会保留，不会覆盖或移动。" });
+    heroCopy.createEl("p", { text: "推荐初始化会创建任务系统、任务与知识笔记模板、任务总表和三类知识文件夹。已有文件只会保留，不会覆盖或移动。" });
     const progress = hero.createDiv({ cls: "pvd-onboarding-progress", attr: { role: "status", "aria-label": `初始化进度：完成 ${readyCount}/3` } });
     progress.createEl("strong", { text: `${readyCount}/3` });
     progress.createSpan({ text: readyCount === 3 ? "准备完成" : "项已就绪" });
-    new Setting(hero).setName(readyCount === 3 ? "推荐结构已准备好" : "自动创建推荐结构").setDesc("包括 3 个知识目录、任务、项目与每日进展目录，以及任务模板和 Obsidian Bases 任务总表；可以重复执行，已有内容不会被改写。").addButton((button) => button.setButtonText(readyCount === 3 ? "检查并补齐" : "一键初始化").setCta().onClick(() => new ConfirmModal(this.app, "初始化推荐工作区", "将补齐三类知识文件夹、任务与项目目录、任务模板和任务总表。已有文件不会被覆盖，是否继续？", "开始初始化", async () => {
+    new Setting(hero).setName(readyCount === 3 ? "推荐结构已准备好" : "自动创建推荐结构").setDesc("包括 3 个知识目录、任务、项目与每日进展目录，以及任务与三类知识笔记模板和 Obsidian Bases 任务总表；可以重复执行，已有内容不会被改写。").addButton((button) => button.setButtonText(readyCount === 3 ? "检查并补齐" : "一键初始化").setCta().onClick(() => new ConfirmModal(this.app, "初始化推荐工作区", "将补齐三类知识文件夹、任务与项目目录、任务与三类知识笔记模板和任务总表。已有文件不会被覆盖，是否继续？", "开始初始化", async () => {
       var _a, _b;
       Object.entries(defaults).forEach(([key, path]) => {
         if (!settings[key]) settings[key] = path;
@@ -2416,8 +2485,24 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
         showNotice("任务模板路径必须以 .md 结尾。");
         return;
       }
+      if (knowledgeNoteTemplates(settings).some((template) => !template.path.endsWith(".md"))) {
+        showNotice("知识笔记模板路径必须以 .md 结尾。");
+        return;
+      }
       if (!settings.taskBasePath.endsWith(".base")) {
         showNotice("任务总表路径必须以 .base 结尾。");
+        return;
+      }
+      const templates = knowledgeNoteTemplates(settings);
+      const templateSetup = planKnowledgeNoteTemplateSetup({
+        templates,
+        existingEntries: Object.fromEntries(templates.map((template) => {
+          const existing = this.app.vault.getAbstractFileByPath(template.path);
+          return [template.path, existing ? existing.children ? "folder" : "file" : "missing"];
+        }))
+      });
+      if (templateSetup.conflicts.length) {
+        showNotice(templateSetup.conflicts.some((conflict) => conflict.reason === "duplicate-path") ? "知识笔记模板路径不能重复。" : "知识笔记模板路径当前是一个文件夹，请换一个 .md 文件路径。");
         return;
       }
       const folders = [settings.inboxFolder, settings.literatureFolder, settings.permanentFolder, settings.taskFolder, settings.projectFolder, "目标与任务/任务管理/每日进展"];
@@ -2429,6 +2514,10 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
         return;
       }
       if (!this.app.vault.getAbstractFileByPath(templatePath)) await this.app.vault.create(templatePath, starterTaskTemplate(Object.assign({}, DEFAULT_SETTINGS.schema, settings.schema || {})));
+      for (const template of templateSetup.creations) {
+        await ensureVaultFolder(this.app.vault, template.path.split("/").slice(0, -1).join("/"));
+        await this.app.vault.create(template.path, template.content);
+      }
       const basePath = settings.taskBasePath;
       await ensureVaultFolder(this.app.vault, basePath.split("/").slice(0, -1).join("/"));
       if ((_b = this.app.vault.getAbstractFileByPath(basePath)) == null ? void 0 : _b.children) {
@@ -2485,10 +2574,19 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
     const templateCard = assets.createDiv({ cls: "pvd-settings-asset-card" });
     templateCard.createEl("strong", { text: "任务模板 · 决定新任务长什么样" });
     templateCard.createEl("p", { text: "每次在工作台点击“新建任务”时使用。插件会自动写入计划日期、创建日期和任务标题。模板不存在时仍可使用内置格式。" });
-    new Setting(templateCard).setName(templateReady ? "模板已找到" : "等待初始化").setDesc(value("taskTemplatePath")).addText((text) => text.setValue(value("taskTemplatePath")).setPlaceholder(defaults.taskTemplatePath).onChange(async (next) => {
+    new Setting(templateCard).setName(taskTemplateReady ? "模板已找到" : "等待初始化").setDesc(value("taskTemplatePath")).addText((text) => text.setValue(value("taskTemplatePath")).setPlaceholder(defaults.taskTemplatePath).onChange(async (next) => {
       settings.taskTemplatePath = normalizeVaultPath(next);
       await this.plugin.saveSettings();
     }));
+    const knowledgeTemplateCard = assets.createDiv({ cls: "pvd-settings-asset-card" });
+    knowledgeTemplateCard.createEl("strong", { text: "三类知识笔记模板 · 定义转换后的笔记格式" });
+    knowledgeTemplateCard.createEl("p", { text: "每种知识笔记类型都有独立模板。转换功能会保留原笔记内容，并将它放入模板中的 {{content}} 位置。" });
+    knowledgeNoteTemplateDefinitions.forEach((template) => {
+      new Setting(knowledgeTemplateCard).setName(fileExists(value(template.pathKey)) ? "知识模板已找到" : "等待初始化").setDesc(template.label).addText((text) => text.setValue(value(template.pathKey)).setPlaceholder(defaults[template.pathKey]).onChange(async (next) => {
+        settings[template.pathKey] = normalizeVaultPath(next);
+        await this.plugin.saveSettings();
+      }));
+    });
     const baseCard = assets.createDiv({ cls: "pvd-settings-asset-card" });
     baseCard.createEl("strong", { text: "任务总表 · 用表格浏览同一批任务" });
     baseCard.createEl("p", { text: "这是可选的 Obsidian Bases 视图，提供“全部、今日、进行中、已完成”表格。它不会决定插件读取哪些任务。" });
