@@ -1403,7 +1403,11 @@ module.exports = class FocusWorkbenchPlugin extends Plugin {
     const current = this.knowledgeNoteType(file);
     const targets = knowledgeNoteTemplateDefinitions.filter(target => target.type !== current);
     if (!targets.length) return;
-    menu.addItem(item => item.setTitle(translateUiText("转换为笔记类型", this.settings.language)).setIcon("shuffle").setSubmenu(submenu => targets.forEach(target => submenu.addItem(targetItem => targetItem.setTitle(translateUiText(target.title, this.settings.language)).onClick(() => this.confirmNativeConversion(file, target))))));
+    menu.addItem(item => {
+      item.setTitle(translateUiText("转换为笔记类型", this.settings.language)).setIcon("shuffle");
+      const submenu = item.setSubmenu();
+      targets.forEach(target => submenu.addItem(targetItem => targetItem.setTitle(translateUiText(target.title, this.settings.language)).onClick(() => this.confirmNativeConversion(file, target))));
+    });
   }
   async confirmNativeConversion(file, target) {
     const folder = ({ fleeting: this.settings.inboxFolder, literature: this.settings.literatureFolder, permanent: this.settings.permanentFolder })[target.type] || "";
