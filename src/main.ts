@@ -8,7 +8,7 @@ import { validateWorkbenchDocumentFolders } from "./core/workbench-document-mode
 import { planWorkbenchDocumentCreation } from "./core/workbench-document-creation";
 import { planWorkbenchDocumentTemplateSetup } from "./core/workbench-document-templates";
 
-const { ItemView, Menu, Modal, Notice, Plugin, PluginSettingTab, Setting, normalizePath } = require("obsidian");
+import { ItemView, Menu, Modal, Notice, Plugin, PluginSettingTab, Setting, normalizePath } from "obsidian";
 
 const VIEW_TYPE = "focus-workbench-view";
 const DEFAULT_SETTINGS = {
@@ -496,7 +496,7 @@ class FocusWorkbenchView extends ItemView {
     this.button(nav, "知识工作台", async () => { this.tab = "knowledge"; await this.render(); }, this.tab === "knowledge" ? "is-active" : "");
     this.button(nav, "打开任务总表", () => this.openFile(this.config().taskBase));
     this.button(nav, "刷新", () => this.render());
-    if (this.tab === "home") await this.renderHome(shell); else if (this.tab === "tasks") await this.renderTasks(shell); else await this.renderKnowledge(shell);
+    if (this.tab === "home") void this.renderHome(shell); else if (this.tab === "tasks") await this.renderTasks(shell); else await this.renderKnowledge(shell);
     localizeElement(root, this.plugin.settings.language);
     this.renderedTab = this.tab;
     root.scrollTop = scrollTop;
@@ -617,7 +617,8 @@ class FocusWorkbenchView extends ItemView {
     const meta = head.createDiv({ cls: "pvd-idea-queue-head-meta" });
     meta.createEl("strong", { cls: "pvd-idea-queue-count", text: String(files.length), attr: { "aria-label": `${files.length} 条` } });
     const chevron = meta.createSpan({ cls: "pvd-idea-queue-chevron", attr: { "aria-hidden": "true" } });
-    chevron.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+    const chevronIcon = chevron.createSvg("svg", { attr: { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2.5", "stroke-linecap": "round", "stroke-linejoin": "round" } });
+    chevronIcon.createSvg("path", { attr: { d: "M6 9l6 6 6-6" } });
     head.addEventListener("click", toggle);
     head.addEventListener("keydown", event => { if ((event.key === "Enter" || event.key === " ") && !event.shiftKey) { event.preventDefault(); toggle(); } });
     if (collapsed) return;
@@ -744,12 +745,14 @@ class FocusWorkbenchView extends ItemView {
   }
   visualModeButton(parent, key, label) {
     const paths = {
-      calendar: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
-      timeline: '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/>',
-      stats: '<path d="M3 3v18h18"/><path d="M7 16v-4M12 16V7M17 16v-7"/>'
+      calendar: [["rect", { x: "3", y: "4", width: "18", height: "17", rx: "2" }], ["path", { d: "M16 2v4M8 2v4M3 10h18" }]],
+      timeline: [["path", { d: "M4 6h16M4 12h16M4 18h16" }], ["circle", { cx: "8", cy: "6", r: "2" }], ["circle", { cx: "15", cy: "12", r: "2" }], ["circle", { cx: "11", cy: "18", r: "2" }]],
+      stats: [["path", { d: "M3 3v18h18" }], ["path", { d: "M7 16v-4M12 16V7M17 16v-7" }]]
     };
     const button = parent.createEl("button", { cls: `pvd-visual-mode is-${key} ${this.taskVisualMode === key ? "is-active" : ""}`, attr: { title: label, "aria-label": label } });
-    button.createSpan({ cls: "pvd-view-icon", attr: { "aria-hidden": "true" } }).innerHTML = `<svg width="16" height="16" style="display:block;width:16px;height:16px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[key]}</svg>`;
+    const icon = button.createSpan({ cls: "pvd-view-icon", attr: { "aria-hidden": "true" } });
+    const svg = icon.createSvg("svg", { attr: { width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "1.8", "stroke-linecap": "round", "stroke-linejoin": "round" } });
+    paths[key].forEach(([tag, attributes]) => svg.createSvg(tag, { attr: attributes }));
     button.createSpan({ text: label }); button.addEventListener("click", () => { this.taskVisualMode = key; void this.render(); }); return button;
   }
   renderTaskVisualControls(parent, tasks) {
@@ -777,8 +780,8 @@ class FocusWorkbenchView extends ItemView {
   renderTaskStats(parent, tasks) {
     const total = tasks.length; const completed = tasks.filter(file => this.taskDone(file)); const active = tasks.filter(file => !this.taskDone(file)); const doing = active.filter(file => this.taskStatus(file) === "进行中"); const overdue = active.filter(file => this.isPastCalendarDay(this.taskPlanKey(file), this.today()));
     const card = parent.createEl("section", { cls: "pvd-card pvd-task-stats-view" }); card.createEl("h2", { text: "任务统计" }); card.createEl("p", { text: "统计基于当前筛选条件，不改变任务数据。" });
-    const statIcons = { active: '<path d="M5 12h14M12 5l7 7-7 7"/>', doing: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>', done: '<circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.2 2.2 4.8-5"/>', overdue: '<path d="M12 8v5M12 17h.01"/><path d="M10.3 3.7 2.5 17.2A2 2 0 0 0 4.2 20h15.6a2 2 0 0 0 1.7-2.8L13.7 3.7a2 2 0 0 0-3.4 0Z"/>' };
-    const metrics = [["active", "待推进", active.length], ["doing", "进行中", doing.length], ["done", "已完成", completed.length], ["overdue", "已逾期", overdue.length]]; const summary = card.createDiv({ cls: "pvd-stats-grid" }); metrics.forEach(([tone, label, count]) => { const item = summary.createDiv({ cls: `is-${tone}` }); const icon = item.createSpan({ cls: "pvd-stat-icon", attr: { "aria-hidden": "true", style: "display:grid;width:28px;height:28px;overflow:hidden;place-items:center" } }); icon.innerHTML = `<svg width="15" height="15" style="display:block;width:15px;height:15px;max-width:15px;max-height:15px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${statIcons[tone]}</svg>`; item.createEl("b", { text: String(count) }); item.createSpan({ cls: "pvd-stat-label", text: label }); });
+    const statIcons = { active: [["path", { d: "M5 12h14M12 5l7 7-7 7" }]], doing: [["circle", { cx: "12", cy: "12", r: "8" }], ["path", { d: "M12 8v4l3 2" }]], done: [["circle", { cx: "12", cy: "12", r: "8" }], ["path", { d: "m8.5 12 2.2 2.2 4.8-5" }]], overdue: [["path", { d: "M12 8v5M12 17h.01" }], ["path", { d: "M10.3 3.7 2.5 17.2A2 2 0 0 0 4.2 20h15.6a2 2 0 0 0 1.7-2.8L13.7 3.7a2 2 0 0 0-3.4 0Z" }]] };
+    const metrics = [["active", "待推进", active.length], ["doing", "进行中", doing.length], ["done", "已完成", completed.length], ["overdue", "已逾期", overdue.length]]; const summary = card.createDiv({ cls: "pvd-stats-grid" }); metrics.forEach(([tone, label, count]) => { const item = summary.createDiv({ cls: `is-${tone}` }); const icon = item.createSpan({ cls: "pvd-stat-icon", attr: { "aria-hidden": "true" } }); const svg = icon.createSvg("svg", { attr: { width: "15", height: "15", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "1.8", "stroke-linecap": "round", "stroke-linejoin": "round" } }); statIcons[tone].forEach(([tag, attributes]) => svg.createSvg(tag, { attr: attributes })); item.createEl("b", { text: String(count) }); item.createSpan({ cls: "pvd-stat-label", text: label }); });
     // Chart bars must be mutually exclusive (待做/进行中/暂停/已完成); the KPI grid above intentionally shows overlapping counts.
     const chartMetrics = [["todo", "待做", active.filter(file => this.taskStatus(file) === "待做").length], ["doing", "进行中", doing.length], ["paused", "暂停", active.filter(file => this.taskStatus(file) === "暂停").length], ["done", "已完成", completed.length]];
     const maxMetric = Math.max(...chartMetrics.map(([, , count]) => count), 1); const chart = card.createDiv({ cls: "pvd-stats-chart" }); const chartHead = chart.createDiv({ cls: "pvd-stats-chart-head" }); const chartTitle = chartHead.createDiv(); chartTitle.createEl("h3", { text: "任务状态分布" }); chartTitle.createEl("p", { text: `共 ${total} 项任务 · 完成率 ${total ? Math.round(completed.length / total * 100) : 0}%` }); chartHead.createSpan({ text: "当前筛选" }); const plot = chart.createDiv({ cls: "pvd-chart-plot" }); const grid = plot.createDiv({ cls: "pvd-chart-grid", attr: { "aria-hidden": "true" } }); [100, 75, 50, 25, 0].forEach(value => grid.createSpan({ attr: { style: `--pvd-grid:${value}%` } })); const bars = plot.createDiv({ cls: "pvd-chart-bars" }); chartMetrics.forEach(([tone, label, count]) => { const column = bars.createDiv({ cls: `pvd-chart-column is-${tone}` }); column.createEl("b", { text: String(count) }); const bar = column.createDiv({ cls: "pvd-chart-bar", attr: { title: `${label}：${count} 项` } }); bar.style.setProperty("--pvd-bar-height", `${count ? Math.max(8, Math.round(count / maxMetric * 100)) : 2}%`); column.createSpan({ text: label }); });
@@ -933,11 +936,11 @@ class FocusWorkbenchView extends ItemView {
       });
       card.addEventListener("keydown", event => {
         if (event.target.closest?.("button")) return;
-        if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); if (this.selectedTaskFiles().length > 1) this.openBatchEditor(); else this.editTask(file); return; }
+        if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); if (this.selectedTaskFiles().length > 1) void this.openBatchEditor(); else void this.editTask(file); return; }
         if ((event.ctrlKey || event.metaKey) && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); event.stopPropagation(); this.toggleTaskSelection(file); this.renderSelectionState(check, file); void this.renderSelectionToolbar(); }
         else if (!event.shiftKey && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); void this.setFocus(file); }
       });
-      card.addEventListener("contextmenu", event => { event.preventDefault(); event.stopPropagation(); if (this.selectedTaskFiles().length > 1) this.openBatchEditor(); else this.editTask(file); });
+      card.addEventListener("contextmenu", event => { event.preventDefault(); event.stopPropagation(); if (this.selectedTaskFiles().length > 1) void this.openBatchEditor(); else void this.editTask(file); });
       card.setAttribute("aria-label", `任务：${file.basename}；左键聚焦，Ctrl/Cmd+左键多选，右键编辑`);
     } else {
       this.bindTaskFocusAndEdit(card, file, `任务：${file.basename}`);
@@ -1116,7 +1119,7 @@ class FocusWorkbenchView extends ItemView {
       content = setFrontmatterField(content, "创建日期", this.dateKey());
       return /^# .+$/m.test(content) ? content.replace(/^# .+$/m, () => `# ${title}`) : `${content.trimEnd()}\n\n# ${title}\n`;
     }
-    return `---\n${schema.typeField}: ${schema.typeValue}\n${schema.projectField}: \"\"\n${schema.statusField}: 待做\n${schema.priorityField}: P2\n${schema.planField}: ${this.dateKey()}\n${schema.timerStateField}: 未开始\n${schema.timerStartedField}: \n${schema.elapsedField}: 0\n${schema.doneField}: false\n---\n\n# ${title}\n\n## 完成标准\n\n- [ ] \n`;
+    return `---\n${schema.typeField}: ${schema.typeValue}\n${schema.projectField}: ""\n${schema.statusField}: 待做\n${schema.priorityField}: P2\n${schema.planField}: ${this.dateKey()}\n${schema.timerStateField}: 未开始\n${schema.timerStartedField}: \n${schema.elapsedField}: 0\n${schema.doneField}: false\n---\n\n# ${title}\n\n## 完成标准\n\n- [ ] \n`;
   }
   async editTask(file) {
     const fm = this.meta(file); const project = String(this.taskProperty(file, "projectField") || "").replace(/^\[\[|\]\]$/g, "");
@@ -1440,15 +1443,15 @@ const VISUAL_RUNTIME_CSS = `
 .theme-dark .pvd-visual-v7 .pvd-stats-bar{background:rgba(255,255,255,.10)!important}`;
 
 module.exports = class FocusWorkbenchPlugin extends Plugin {
+  // This is plugin-owned persistence, not the Obsidian 1.13 declarative-settings API.
+  settings = DEFAULT_SETTINGS;
   async onload() {
     await this.loadSettings();
     ACTIVE_LANGUAGE = this.settings.language;
-    document.getElementById(VISUAL_RUNTIME_STYLE_ID)?.remove();
-    const visualStyle = document.createElement("style"); visualStyle.id = VISUAL_RUNTIME_STYLE_ID; visualStyle.textContent = VISUAL_RUNTIME_CSS; document.head.appendChild(visualStyle); this.register(() => visualStyle.remove());
     this.registerView(VIEW_TYPE, leaf => new FocusWorkbenchView(leaf, this));
     this.addSettingTab(new FocusWorkbenchSettingTab(this.app, this));
     this.ribbonIconEl = this.addRibbonIcon("layout-dashboard", this.settings.language === "en" ? "Open Omni Workbench" : "打开 Omni Workbench", () => this.activateView());
-    this.addCommand({ id: "open-focus-workbench", name: "Open Omni Workbench", callback: () => this.activateView() });
+    this.addCommand({ id: "open-focus-workbench", name: "Open workbench", callback: () => this.activateView() });
     this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => this.addKnowledgeConversionMenu(menu, file)));
   }
   knowledgeNoteType(file) {
@@ -1492,7 +1495,7 @@ module.exports = class FocusWorkbenchPlugin extends Plugin {
     }
     await workspace.revealLeaf(leaf);
   }
-  onunload() { document.getElementById(VISUAL_RUNTIME_STYLE_ID)?.remove(); this.app.workspace.detachLeavesOfType(VIEW_TYPE); }
+  onunload() {}
 };
 
 /* nosourcemap */

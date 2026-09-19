@@ -6548,7 +6548,7 @@ function planWorkbenchDocumentTemplateSetup(input) {
 }
 
 // src/main.ts
-var { ItemView, Menu, Modal, Notice, Plugin, PluginSettingTab, Setting, normalizePath: normalizePath3 } = require("obsidian");
+var import_obsidian = require("obsidian");
 var VIEW_TYPE = "focus-workbench-view";
 var DEFAULT_SETTINGS = {
   language: "zh-CN",
@@ -6905,9 +6905,9 @@ function localizeElement(root, language = ACTIVE_LANGUAGE) {
   });
 }
 function showNotice(message) {
-  return new Notice(translateUiText(message));
+  return new import_obsidian.Notice(translateUiText(message));
 }
-var TextPromptModal = class extends Modal {
+var TextPromptModal = class extends import_obsidian.Modal {
   constructor(app, title, placeholder, submit, validate = () => "") {
     super(app);
     this.title = title;
@@ -6942,7 +6942,7 @@ var TextPromptModal = class extends Modal {
     window.setTimeout(() => input.focus(), 0);
   }
 };
-var ConfirmModal = class extends Modal {
+var ConfirmModal = class extends import_obsidian.Modal {
   constructor(app, title, message, confirmText, onConfirm) {
     super(app);
     this.title = title;
@@ -6967,7 +6967,7 @@ var ConfirmModal = class extends Modal {
     localizeElement(contentEl);
   }
 };
-var TaskEditorModal = class extends Modal {
+var TaskEditorModal = class extends import_obsidian.Modal {
   constructor(app, file, data, projects, submit, workflow = [], options = {}) {
     super(app);
     this.file = file;
@@ -7062,7 +7062,7 @@ var TaskEditorModal = class extends Modal {
     localizeElement(contentEl);
   }
 };
-var IdeaEditorModal = class extends Modal {
+var IdeaEditorModal = class extends import_obsidian.Modal {
   constructor(app, view, file) {
     super(app);
     this.view = view;
@@ -7120,7 +7120,7 @@ var IdeaEditorModal = class extends Modal {
     window.setTimeout(() => title.focus(), 0);
   }
 };
-var BatchTaskEditorModal = class extends Modal {
+var BatchTaskEditorModal = class extends import_obsidian.Modal {
   constructor(app, files, projects, submit) {
     super(app);
     this.files = files;
@@ -7171,7 +7171,7 @@ var BatchTaskEditorModal = class extends Modal {
     window.setTimeout(() => project.focus(), 0);
   }
 };
-var SetupModal = class extends Modal {
+var SetupModal = class extends import_obsidian.Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
@@ -7223,7 +7223,7 @@ var SetupModal = class extends Modal {
     localizeElement(contentEl);
   }
 };
-var FocusWorkbenchView = class extends ItemView {
+var FocusWorkbenchView = class extends import_obsidian.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -7621,7 +7621,7 @@ var FocusWorkbenchView = class extends ItemView {
     }, this.tab === "knowledge" ? "is-active" : "");
     this.button(nav, "打开任务总表", () => this.openFile(this.config().taskBase));
     this.button(nav, "刷新", () => this.render());
-    if (this.tab === "home") await this.renderHome(shell);
+    if (this.tab === "home") void this.renderHome(shell);
     else if (this.tab === "tasks") await this.renderTasks(shell);
     else await this.renderKnowledge(shell);
     localizeElement(root, this.plugin.settings.language);
@@ -7803,7 +7803,8 @@ var FocusWorkbenchView = class extends ItemView {
     const meta = head.createDiv({ cls: "pvd-idea-queue-head-meta" });
     meta.createEl("strong", { cls: "pvd-idea-queue-count", text: String(files.length), attr: { "aria-label": `${files.length} 条` } });
     const chevron = meta.createSpan({ cls: "pvd-idea-queue-chevron", attr: { "aria-hidden": "true" } });
-    chevron.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+    const chevronIcon = chevron.createSvg("svg", { attr: { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2.5", "stroke-linecap": "round", "stroke-linejoin": "round" } });
+    chevronIcon.createSvg("path", { attr: { d: "M6 9l6 6 6-6" } });
     head.addEventListener("click", toggle);
     head.addEventListener("keydown", (event) => {
       if ((event.key === "Enter" || event.key === " ") && !event.shiftKey) {
@@ -8019,12 +8020,14 @@ var FocusWorkbenchView = class extends ItemView {
   }
   visualModeButton(parent, key, label) {
     const paths = {
-      calendar: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
-      timeline: '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/>',
-      stats: '<path d="M3 3v18h18"/><path d="M7 16v-4M12 16V7M17 16v-7"/>'
+      calendar: [["rect", { x: "3", y: "4", width: "18", height: "17", rx: "2" }], ["path", { d: "M16 2v4M8 2v4M3 10h18" }]],
+      timeline: [["path", { d: "M4 6h16M4 12h16M4 18h16" }], ["circle", { cx: "8", cy: "6", r: "2" }], ["circle", { cx: "15", cy: "12", r: "2" }], ["circle", { cx: "11", cy: "18", r: "2" }]],
+      stats: [["path", { d: "M3 3v18h18" }], ["path", { d: "M7 16v-4M12 16V7M17 16v-7" }]]
     };
     const button = parent.createEl("button", { cls: `pvd-visual-mode is-${key} ${this.taskVisualMode === key ? "is-active" : ""}`, attr: { title: label, "aria-label": label } });
-    button.createSpan({ cls: "pvd-view-icon", attr: { "aria-hidden": "true" } }).innerHTML = `<svg width="16" height="16" style="display:block;width:16px;height:16px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[key]}</svg>`;
+    const icon = button.createSpan({ cls: "pvd-view-icon", attr: { "aria-hidden": "true" } });
+    const svg = icon.createSvg("svg", { attr: { width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "1.8", "stroke-linecap": "round", "stroke-linejoin": "round" } });
+    paths[key].forEach(([tag, attributes]) => svg.createSvg(tag, { attr: attributes }));
     button.createSpan({ text: label });
     button.addEventListener("click", () => {
       this.taskVisualMode = key;
@@ -8144,13 +8147,14 @@ var FocusWorkbenchView = class extends ItemView {
     const card = parent.createEl("section", { cls: "pvd-card pvd-task-stats-view" });
     card.createEl("h2", { text: "任务统计" });
     card.createEl("p", { text: "统计基于当前筛选条件，不改变任务数据。" });
-    const statIcons = { active: '<path d="M5 12h14M12 5l7 7-7 7"/>', doing: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>', done: '<circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.2 2.2 4.8-5"/>', overdue: '<path d="M12 8v5M12 17h.01"/><path d="M10.3 3.7 2.5 17.2A2 2 0 0 0 4.2 20h15.6a2 2 0 0 0 1.7-2.8L13.7 3.7a2 2 0 0 0-3.4 0Z"/>' };
+    const statIcons = { active: [["path", { d: "M5 12h14M12 5l7 7-7 7" }]], doing: [["circle", { cx: "12", cy: "12", r: "8" }], ["path", { d: "M12 8v4l3 2" }]], done: [["circle", { cx: "12", cy: "12", r: "8" }], ["path", { d: "m8.5 12 2.2 2.2 4.8-5" }]], overdue: [["path", { d: "M12 8v5M12 17h.01" }], ["path", { d: "M10.3 3.7 2.5 17.2A2 2 0 0 0 4.2 20h15.6a2 2 0 0 0 1.7-2.8L13.7 3.7a2 2 0 0 0-3.4 0Z" }]] };
     const metrics = [["active", "待推进", active.length], ["doing", "进行中", doing.length], ["done", "已完成", completed.length], ["overdue", "已逾期", overdue.length]];
     const summary = card.createDiv({ cls: "pvd-stats-grid" });
     metrics.forEach(([tone, label, count]) => {
       const item = summary.createDiv({ cls: `is-${tone}` });
-      const icon = item.createSpan({ cls: "pvd-stat-icon", attr: { "aria-hidden": "true", style: "display:grid;width:28px;height:28px;overflow:hidden;place-items:center" } });
-      icon.innerHTML = `<svg width="15" height="15" style="display:block;width:15px;height:15px;max-width:15px;max-height:15px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${statIcons[tone]}</svg>`;
+      const icon = item.createSpan({ cls: "pvd-stat-icon", attr: { "aria-hidden": "true" } });
+      const svg = icon.createSvg("svg", { attr: { width: "15", height: "15", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "1.8", "stroke-linecap": "round", "stroke-linejoin": "round" } });
+      statIcons[tone].forEach(([tag, attributes]) => svg.createSvg(tag, { attr: attributes }));
       item.createEl("b", { text: String(count) });
       item.createSpan({ cls: "pvd-stat-label", text: label });
     });
@@ -8411,8 +8415,8 @@ var FocusWorkbenchView = class extends ItemView {
         if ((_b = (_a = event.target).closest) == null ? void 0 : _b.call(_a, "button")) return;
         if (event.key === "ContextMenu" || event.shiftKey && event.key === "F10") {
           event.preventDefault();
-          if (this.selectedTaskFiles().length > 1) this.openBatchEditor();
-          else this.editTask(file);
+          if (this.selectedTaskFiles().length > 1) void this.openBatchEditor();
+          else void this.editTask(file);
           return;
         }
         if ((event.ctrlKey || event.metaKey) && (event.key === "Enter" || event.key === " ")) {
@@ -8429,8 +8433,8 @@ var FocusWorkbenchView = class extends ItemView {
       card.addEventListener("contextmenu", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (this.selectedTaskFiles().length > 1) this.openBatchEditor();
-        else this.editTask(file);
+        if (this.selectedTaskFiles().length > 1) void this.openBatchEditor();
+        else void this.editTask(file);
       });
       card.setAttribute("aria-label", `任务：${file.basename}；左键聚焦，Ctrl/Cmd+左键多选，右键编辑`);
     } else {
@@ -8665,7 +8669,7 @@ date: ${this.dateKey()}
     new ConfirmModal(this.app, "转换为笔记类型", `将“${file.path}”转换为${target.title}并移动到“${destination}”？`, "开始转换", () => this.convertNoteToType(file, target.type)).open();
   }
   openKnowledgeContextMenu(event, file) {
-    const menu = new Menu();
+    const menu = new import_obsidian.Menu();
     const current = this.knowledgeNoteType(file);
     if (current === "fleeting") menu.addItem((item) => item.setTitle(translateUiText("编辑闪念", this.plugin.settings.language)).setIcon("pencil").onClick(() => this.editIdea(file)));
     menu.addItem((item) => {
@@ -8945,7 +8949,7 @@ function workbenchDocumentTemplates(settings) {
   ];
 }
 function normalizeVaultPath(value) {
-  return normalizePath3(String(value || "").trim()).replace(/\/$/, "");
+  return (0, import_obsidian.normalizePath)(String(value || "").trim()).replace(/\/$/, "");
 }
 async function ensureVaultFolder(vault, folder) {
   let current = "";
@@ -8954,7 +8958,7 @@ async function ensureVaultFolder(vault, folder) {
     if (!vault.getAbstractFileByPath(current)) await vault.createFolder(current);
   }
 }
-var FocusWorkbenchSettingTab = class extends PluginSettingTab {
+var FocusWorkbenchSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -8964,7 +8968,7 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
     containerEl.empty();
     containerEl.addClass("pvd-settings-guide");
     const settings = this.plugin.settings;
-    const languageSetting = new Setting(containerEl).setName("界面语言").setDesc("选择 Omni Workbench 的界面语言。仓库目录、字段和值不会被改写。").addDropdown((dropdown) => dropdown.addOption("zh-CN", "简体中文").addOption("en", "English").setValue(settings.language || DEFAULT_SETTINGS.language).onChange(async (language) => {
+    const languageSetting = new import_obsidian.Setting(containerEl).setName("界面语言").setDesc("选择 Omni Workbench 的界面语言。仓库目录、字段和值不会被改写。").addDropdown((dropdown) => dropdown.addOption("zh-CN", "简体中文").addOption("en", "English").setValue(settings.language || DEFAULT_SETTINGS.language).onChange(async (language) => {
       settings.language = language;
       ACTIVE_LANGUAGE = language;
       await this.plugin.saveSettings();
@@ -9021,7 +9025,7 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
     const progress = hero.createDiv({ cls: "pvd-onboarding-progress", attr: { role: "status", "aria-label": `初始化进度：完成 ${readyCount}/3` } });
     progress.createEl("strong", { text: `${readyCount}/3` });
     progress.createSpan({ text: readyCount === 3 ? "准备完成" : "项已就绪" });
-    new Setting(hero).setName(readyCount === 3 ? "推荐结构已准备好" : "自动创建推荐结构").setDesc("包括项目目录、三类知识目录、五类模板和可选的 Obsidian Bases 任务总表；不会创建顶层任务目录。").addButton((button) => button.setButtonText(readyCount === 3 ? "检查并补齐" : "一键初始化").setCta().onClick(() => new ConfirmModal(this.app, "初始化推荐工作区", "将补齐项目目录、三类知识目录、五类模板和任务总表；不会创建顶层任务目录。已有文件不会被覆盖，是否继续？", "开始初始化", async () => {
+    new import_obsidian.Setting(hero).setName(readyCount === 3 ? "推荐结构已准备好" : "自动创建推荐结构").setDesc("包括项目目录、三类知识目录、五类模板和可选的 Obsidian Bases 任务总表；不会创建顶层任务目录。").addButton((button) => button.setButtonText(readyCount === 3 ? "检查并补齐" : "一键初始化").setCta().onClick(() => new ConfirmModal(this.app, "初始化推荐工作区", "将补齐项目目录、三类知识目录、五类模板和任务总表；不会创建顶层任务目录。已有文件不会被覆盖，是否继续？", "开始初始化", async () => {
       var _a;
       Object.entries(defaults).forEach(([key, path]) => {
         if (!settings[key]) settings[key] = path;
@@ -9075,7 +9079,7 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
       copy.createEl("strong", { text: title });
       copy.createSpan({ text: description });
     });
-    new Setting(containerEl).setName("第 1 步：理解三个知识文件夹").setDesc("它们代表内容从随手记录到可复用知识的三个阶段，而不是三个主题分类。").setHeading();
+    new import_obsidian.Setting(containerEl).setName("第 1 步：理解三个知识文件夹").setDesc("它们代表内容从随手记录到可复用知识的三个阶段，而不是三个主题分类。").setHeading();
     const knowledgeGrid = containerEl.createDiv({ cls: "pvd-knowledge-folder-guide" });
     [
       ["inboxFolder", "闪念笔记", "先记下来", "临时想法、灵感、待整理的问题。允许不完整，重点是不丢失。", "例如：尝试把周报改成项目复盘"],
@@ -9088,21 +9092,21 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
       head.createSpan({ text: stage });
       card.createEl("p", { text: description });
       card.createEl("small", { text: example });
-      new Setting(card).setName("保存位置").setDesc(folderExists(value(key)) ? "目录已存在" : "初始化时会自动创建").addText((text) => text.setValue(value(key)).setPlaceholder(defaults[key]).onChange((next) => saveDocumentFolder(key, next)));
+      new import_obsidian.Setting(card).setName("保存位置").setDesc(folderExists(value(key)) ? "目录已存在" : "初始化时会自动创建").addText((text) => text.setValue(value(key)).setPlaceholder(defaults[key]).onChange((next) => saveDocumentFolder(key, next)));
     });
-    new Setting(containerEl).setName("第 2 步：确认任务和项目如何保存").setDesc("任务与项目各有自己的默认目录；五个文档目录必须互不重叠。").setHeading();
+    new import_obsidian.Setting(containerEl).setName("第 2 步：确认任务和项目如何保存").setDesc("任务与项目各有自己的默认目录；五个文档目录必须互不重叠。").setHeading();
     const taskSection = containerEl.createDiv({ cls: "pvd-settings-section" });
-    new Setting(taskSection).setName("项目目录").setDesc("每个项目工作区会在这里创建项目文档与其子任务目录。").addText((text) => text.setValue(value("projectFolder")).setPlaceholder(defaults.projectFolder).onChange((next) => saveDocumentFolder("projectFolder", next)));
-    new Setting(containerEl).setName("第 3 步：理解模板和任务总表").setDesc("模板决定新任务笔记的内容；任务总表只是额外的表格视图，两者用途不同。").setHeading();
+    new import_obsidian.Setting(taskSection).setName("项目目录").setDesc("每个项目工作区会在这里创建项目文档与其子任务目录。").addText((text) => text.setValue(value("projectFolder")).setPlaceholder(defaults.projectFolder).onChange((next) => saveDocumentFolder("projectFolder", next)));
+    new import_obsidian.Setting(containerEl).setName("第 3 步：理解模板和任务总表").setDesc("模板决定新任务笔记的内容；任务总表只是额外的表格视图，两者用途不同。").setHeading();
     const assets = containerEl.createDiv({ cls: "pvd-settings-assets" });
     const templateCard = assets.createDiv({ cls: "pvd-settings-asset-card" });
     templateCard.createEl("strong", { text: "任务与项目模板 · 定义执行文档格式" });
     templateCard.createEl("p", { text: "每种执行文档都有独立模板。初始化只会创建缺失模板，绝不会覆盖你已有的内容。" });
-    new Setting(templateCard).setName(taskTemplateReady ? "模板已找到" : "等待初始化").setDesc(value("taskTemplatePath")).addText((text) => text.setValue(value("taskTemplatePath")).setPlaceholder(defaults.taskTemplatePath).onChange(async (next) => {
+    new import_obsidian.Setting(templateCard).setName(taskTemplateReady ? "模板已找到" : "等待初始化").setDesc(value("taskTemplatePath")).addText((text) => text.setValue(value("taskTemplatePath")).setPlaceholder(defaults.taskTemplatePath).onChange(async (next) => {
       settings.taskTemplatePath = normalizeVaultPath(next);
       await this.plugin.saveSettings();
     }));
-    new Setting(templateCard).setName(fileExists(value("projectTemplatePath")) ? "模板已找到" : "等待初始化").setDesc(value("projectTemplatePath")).addText((text) => text.setValue(value("projectTemplatePath")).setPlaceholder(defaults.projectTemplatePath).onChange(async (next) => {
+    new import_obsidian.Setting(templateCard).setName(fileExists(value("projectTemplatePath")) ? "模板已找到" : "等待初始化").setDesc(value("projectTemplatePath")).addText((text) => text.setValue(value("projectTemplatePath")).setPlaceholder(defaults.projectTemplatePath).onChange(async (next) => {
       settings.projectTemplatePath = normalizeVaultPath(next);
       await this.plugin.saveSettings();
     }));
@@ -9110,7 +9114,7 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
     knowledgeTemplateCard.createEl("strong", { text: "三类知识笔记模板 · 定义转换后的笔记格式" });
     knowledgeTemplateCard.createEl("p", { text: "每种知识笔记类型都有独立模板。转换时仅应用模板的 frontmatter，原笔记正文会完整保留。" });
     knowledgeNoteTemplateDefinitions.forEach((template) => {
-      new Setting(knowledgeTemplateCard).setName(fileExists(value(template.pathKey)) ? "知识模板已找到" : "等待初始化").setDesc(template.label).addText((text) => text.setValue(value(template.pathKey)).setPlaceholder(defaults[template.pathKey]).onChange(async (next) => {
+      new import_obsidian.Setting(knowledgeTemplateCard).setName(fileExists(value(template.pathKey)) ? "知识模板已找到" : "等待初始化").setDesc(template.label).addText((text) => text.setValue(value(template.pathKey)).setPlaceholder(defaults[template.pathKey]).onChange(async (next) => {
         settings[template.pathKey] = normalizeVaultPath(next);
         await this.plugin.saveSettings();
       }));
@@ -9118,102 +9122,28 @@ var FocusWorkbenchSettingTab = class extends PluginSettingTab {
     const baseCard = assets.createDiv({ cls: "pvd-settings-asset-card" });
     baseCard.createEl("strong", { text: "任务总表 · 用表格浏览同一批任务" });
     baseCard.createEl("p", { text: "这是可选的 Obsidian Bases 视图，提供“全部、今日、进行中、已完成”表格。它不会决定插件读取哪些任务。" });
-    new Setting(baseCard).setName(baseReady ? "任务总表已找到" : "等待初始化").setDesc(value("taskBasePath")).addText((text) => text.setValue(value("taskBasePath")).setPlaceholder(defaults.taskBasePath).onChange(async (next) => {
+    new import_obsidian.Setting(baseCard).setName(baseReady ? "任务总表已找到" : "等待初始化").setDesc(value("taskBasePath")).addText((text) => text.setValue(value("taskBasePath")).setPlaceholder(defaults.taskBasePath).onChange(async (next) => {
       settings.taskBasePath = normalizeVaultPath(next);
       await this.plugin.saveSettings();
     }));
-    new Setting(containerEl).setName("已有仓库或自定义字段").setDesc("如果你已经有自己的目录和 frontmatter 字段，再使用高级映射；全新用户可以跳过。").setHeading();
-    new Setting(containerEl).setName("连接现有仓库").setDesc("映射已有任务、项目、三类知识目录与字段名称。不会移动或修改任何已有笔记。").addButton((button) => button.setButtonText("打开高级映射").onClick(() => new SetupModal(this.app, this.plugin).open()));
+    new import_obsidian.Setting(containerEl).setName("已有仓库或自定义字段").setDesc("如果你已经有自己的目录和 frontmatter 字段，再使用高级映射；全新用户可以跳过。").setHeading();
+    new import_obsidian.Setting(containerEl).setName("连接现有仓库").setDesc("映射已有任务、项目、三类知识目录与字段名称。不会移动或修改任何已有笔记。").addButton((button) => button.setButtonText("打开高级映射").onClick(() => new SetupModal(this.app, this.plugin).open()));
     localizeElement(containerEl, settings.language);
   }
 };
-var VISUAL_RUNTIME_STYLE_ID = "pvd-visual-runtime-v7";
-var VISUAL_RUNTIME_CSS = `
-.pvd-visual-workspace-v5{grid-template-columns:minmax(0,1fr) minmax(260px,310px)!important;gap:18px!important}
-.pvd-visual-v5{gap:14px!important;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}
-.pvd-visual-v5 .pvd-timeline,.pvd-visual-v5 .pvd-task-stats-view{display:grid!important;gap:14px!important;overflow:visible!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;transform:none!important}
-.pvd-visual-v5 .pvd-timeline>.pvd-section-head{min-height:48px!important;padding:0 2px!important}.pvd-visual-v5 .pvd-timeline .pvd-section-head h2,.pvd-visual-v5 .pvd-task-stats-view>h2{margin:0!important;color:#302e36!important;font:700 20px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important;letter-spacing:-.015em!important}.pvd-visual-v5 .pvd-timeline .pvd-section-head p,.pvd-visual-v5 .pvd-task-stats-view>p{color:#8b8994!important;font:500 11px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-task-stats-view>p{margin:-9px 0 0!important}
-.pvd-visual-v5 .pvd-timeline-board{overflow-x:auto!important;border:1px solid rgba(88,83,115,.12)!important;border-radius:12px!important;background:#fff!important;box-shadow:0 8px 24px rgba(56,48,91,.05)!important}.pvd-visual-v5 .pvd-timeline-months,.pvd-visual-v5 .pvd-timeline-header,.pvd-visual-v5 .pvd-timeline-lane{display:grid!important;grid-template-columns:140px repeat(var(--pvd-timeline-days),minmax(46px,1fr))!important;width:max(100%,var(--pvd-timeline-width))!important;min-width:var(--pvd-timeline-width)!important}.pvd-visual-v5 .pvd-timeline-months{min-height:34px!important;border-bottom:1px solid #eceaf0!important;background:#faf9fc!important}.pvd-visual-v5 .pvd-timeline-months>span{display:flex!important;align-items:center!important;padding:0 10px!important;border-left:1px solid #efedf2!important;color:#55525e!important;font:600 10px/1 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-timeline-months .pvd-timeline-corner{grid-column:1!important;border-left:0!important}.pvd-visual-v5 .pvd-timeline-header{min-height:46px!important;padding:0!important;border-bottom:1px solid #eceaf0!important;background:#fff!important}.pvd-visual-v5 .pvd-timeline-header>span{display:grid!important;align-content:center!important;gap:4px!important;border-left:1px solid #f0eef3!important;color:#9a98a1!important;text-align:center!important}.pvd-visual-v5 .pvd-timeline-header>span:first-child{padding-left:10px!important;border-left:0!important;text-align:left!important}.pvd-visual-v5 .pvd-timeline-header b{font:600 10px/1 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-timeline-header em{font:500 8px/1 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important;font-style:normal!important}.pvd-visual-v5 .pvd-timeline-header .is-today b{display:grid!important;width:22px!important;height:22px!important;margin:auto!important;place-items:center!important;border-radius:50%!important;background:#7357d7!important;color:#fff!important}
-.pvd-visual-v5 .pvd-timeline-lane{border-bottom:1px solid #eceaf0!important}.pvd-visual-v5 .pvd-timeline-project{display:flex!important;flex-direction:column!important;justify-content:center!important;min-width:0!important;padding:10px 12px!important;border-right:1px solid #eceaf0!important;background:#fbfafc!important}.pvd-visual-v5 .pvd-timeline-project strong{overflow:hidden!important;color:#4d4a55!important;font:600 11px/1.25 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important;text-overflow:ellipsis!important;white-space:nowrap!important}.pvd-visual-v5 .pvd-timeline-project span{margin-top:5px!important;color:#aaa7b0!important;font:500 9px/1 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-timeline-track{display:grid!important;grid-template-columns:repeat(var(--pvd-timeline-days),minmax(46px,1fr))!important;grid-template-rows:repeat(var(--pvd-lane-rows),36px)!important;position:relative!important;align-content:center!important;background:transparent!important}.pvd-visual-v5 .pvd-timeline-cell{grid-row:1/-1!important;border-right:1px solid #f0eef3!important}.pvd-visual-v5 .pvd-timeline-task{z-index:2!important;align-self:center!important;width:max-content!important;max-width:170px!important;min-height:25px!important;margin:0 4px!important;padding:4px 8px!important;border:0!important;border-radius:5px!important;background:#e9f3fb!important;box-shadow:none!important;color:#3878a4!important;font:600 10px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}.pvd-visual-v5 .pvd-timeline-task.p0{background:#fbe7eb!important;color:#ae4f62!important}.pvd-visual-v5 .pvd-timeline-task.p1{background:#faeed9!important;color:#956822!important}
-.pvd-visual-v5 .pvd-stats-grid{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:0!important;overflow:hidden!important;border:1px solid #eceaf0!important;border-radius:11px!important;background:#fff!important;box-shadow:0 6px 18px rgba(56,48,91,.04)!important}.pvd-visual-v5 .pvd-stats-grid>div{display:grid!important;grid-template-columns:28px 1fr!important;grid-template-areas:"icon value" "icon label"!important;column-gap:9px!important;min-height:66px!important;padding:11px 12px!important;border:0!important;border-right:1px solid #eceaf0!important;border-radius:0!important;background:#fff!important;box-shadow:none!important}.pvd-visual-v5 .pvd-stats-grid>div:last-child{border-right:0!important}.pvd-visual-v5 .pvd-stat-icon{grid-area:icon!important;display:grid!important;width:28px!important;height:28px!important;min-width:28px!important;min-height:28px!important;margin:0!important;padding:0!important;place-items:center!important;border-radius:7px!important;overflow:hidden!important}.pvd-visual-v5 .pvd-stat-icon svg{display:block!important;width:15px!important;height:15px!important;max-width:15px!important;max-height:15px!important}.pvd-visual-v5 .pvd-stats-grid b{grid-area:value!important;align-self:end!important;color:#403d47!important;font:700 20px/1 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-stats-grid .pvd-stat-label{grid-area:label!important;align-self:start!important;margin-top:3px!important;color:#85818b!important;font:500 10px/1 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}
-.pvd-visual-v5 .pvd-stat-icon{background:#eee9ff!important;color:#6d51ca!important}.pvd-visual-v5 .is-doing .pvd-stat-icon{background:#e3f2ff!important;color:#418bc8!important}.pvd-visual-v5 .is-done .pvd-stat-icon{background:#e5f7ef!important;color:#3d9a73!important}.pvd-visual-v5 .is-overdue .pvd-stat-icon{background:#ffe8ee!important;color:#bf5870!important}
-.pvd-visual-v5 .pvd-stats-chart,.pvd-visual-v5 .pvd-stats-panel{border:1px solid #eceaf0!important;border-radius:11px!important;background:#fff!important;box-shadow:0 6px 18px rgba(56,48,91,.04)!important}.pvd-visual-v5 .pvd-stats-chart{display:grid!important;gap:12px!important;padding:16px 18px 14px!important}.pvd-visual-v5 .pvd-stats-chart-head{display:flex!important;align-items:flex-start!important;justify-content:space-between!important;gap:16px!important}.pvd-visual-v5 .pvd-stats-chart-head h3,.pvd-visual-v5 .pvd-stats-panel h3{margin:0!important;color:#44414b!important;font:650 14px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-stats-chart-head p{margin:5px 0 0!important;color:#99969f!important;font:500 10px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-stats-chart-head>span{padding:5px 7px!important;border-radius:5px!important;background:#f0edf8!important;color:#71658c!important;font:600 9px/1 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-chart-plot{position:relative!important;height:210px!important;border-bottom:1px solid #dedbe3!important}.pvd-visual-v5 .pvd-chart-grid{position:absolute!important;inset:0!important}.pvd-visual-v5 .pvd-chart-grid span{position:absolute!important;right:0!important;left:0!important;bottom:var(--pvd-grid)!important;height:1px!important;border-top:1px dashed #eceaf0!important}.pvd-visual-v5 .pvd-chart-bars{position:absolute!important;inset:0 4%!important;display:grid!important;grid-template-columns:repeat(4,minmax(50px,1fr))!important;align-items:end!important;gap:7%!important}.pvd-visual-v5 .pvd-chart-column{display:grid!important;grid-template-rows:18px minmax(0,1fr) 24px!important;align-items:end!important;height:100%!important;justify-items:center!important;color:#85818b!important}.pvd-visual-v5 .pvd-chart-column>b,.pvd-visual-v5 .pvd-chart-column>span{color:#6d6974!important;font:600 10px/1 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-chart-bar{align-self:end!important;width:min(34px,48%)!important;height:var(--pvd-bar-height)!important;min-height:2px!important;border-radius:5px 5px 2px 2px!important;background:#8167df!important;box-shadow:none!important}.pvd-visual-v5 .pvd-chart-column.is-doing .pvd-chart-bar{background:#58a6df!important}.pvd-visual-v5 .pvd-chart-column.is-done .pvd-chart-bar{background:#4caf83!important}.pvd-visual-v5 .pvd-chart-column.is-overdue .pvd-chart-bar{background:#df6b82!important}.pvd-visual-v5 .pvd-stats-analysis{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}.pvd-visual-v5 .pvd-stats-panel{display:grid!important;gap:11px!important;padding:14px 15px!important}.pvd-visual-v5 .pvd-stats-row{display:grid!important;grid-template-columns:minmax(72px,1fr) minmax(80px,2fr) auto!important;align-items:center!important;gap:10px!important;color:#85818b!important;font:500 10px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif!important}.pvd-visual-v5 .pvd-stats-bar{height:5px!important;overflow:hidden!important;border-radius:999px!important;background:#f0eef3!important}.pvd-visual-v5 .pvd-stats-bar span{display:block!important;height:100%!important;border-radius:inherit!important;background:#8167df!important}
-@media(max-width:900px){.pvd-visual-workspace-v5{grid-template-columns:1fr!important}.pvd-visual-v5 .pvd-stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
-/* v7 theme: omni-workbench surfaces with Notion-inspired data structures. */
-.pvd-visual-v7{--v7-purple:#7857df;--v7-blue:#52a5e3;--v7-ink:#2e3040;--v7-muted:#7189a0;--v7-line:rgba(99,126,158,.13)}
-.pvd-visual-v7 .pvd-visual-controls{padding:8px 10px!important;border:1px solid rgba(255,255,255,.88)!important;border-radius:18px!important;background:rgba(255,255,255,.61)!important;box-shadow:0 12px 30px rgba(74,77,122,.08),inset 0 1px 0 #fff!important;backdrop-filter:blur(16px)!important}.pvd-visual-v7 .pvd-visual-tabs .pvd-visual-mode{min-height:38px!important;border-radius:12px!important;color:#66839d!important;font:800 12px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-visual-tabs .pvd-visual-mode.is-active{background:linear-gradient(135deg,#eee9ff,#e3ddff)!important;box-shadow:0 5px 14px rgba(112,80,207,.13)!important;color:#674bc4!important}.pvd-visual-v7 .pvd-visual-select{min-height:36px!important;border:1px solid rgba(105,126,158,.14)!important;border-radius:11px!important;background:rgba(255,255,255,.78)!important;color:#668099!important;font:800 11px "Nunito","Microsoft YaHei",sans-serif!important}
-.pvd-visual-v7 .pvd-timeline,.pvd-visual-v7 .pvd-task-stats-view{gap:18px!important;padding:26px!important;border:1px solid rgba(255,255,255,.90)!important;border-radius:30px!important;background:linear-gradient(145deg,rgba(255,255,255,.91),rgba(239,247,255,.76))!important;box-shadow:0 22px 52px rgba(77,78,124,.11),inset 0 1px 0 #fff!important}
-.pvd-visual-v7 .pvd-timeline>.pvd-section-head{min-height:58px!important;padding:0!important}.pvd-visual-v7 .pvd-timeline .pvd-section-head h2,.pvd-visual-v7 .pvd-task-stats-view>h2{color:var(--v7-ink)!important;font:900 clamp(27px,2.7vw,35px)/1.12 "Nunito","Microsoft YaHei",sans-serif!important;letter-spacing:-.03em!important}.pvd-visual-v7 .pvd-timeline .pvd-section-head p,.pvd-visual-v7 .pvd-task-stats-view>p{color:var(--v7-muted)!important;font:700 12px/1.5 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-task-stats-view>p{margin:-12px 0 0!important}
-.pvd-visual-v7 .pvd-timeline-ranges{padding:5px!important;border:1px solid rgba(255,255,255,.88)!important;border-radius:15px!important;background:rgba(255,255,255,.63)!important;box-shadow:0 8px 20px rgba(66,83,121,.07)!important}.pvd-visual-v7 .pvd-timeline-ranges button{min-height:36px!important;padding:0 12px!important;border-radius:11px!important;color:#6c86a0!important;font:800 11px "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-timeline-ranges button.is-active{background:linear-gradient(135deg,#8b70ed,#7151d5)!important;box-shadow:0 7px 16px rgba(112,78,209,.20)!important;color:#fff!important}
-.pvd-visual-v7 .pvd-timeline-board{border:1px solid rgba(255,255,255,.91)!important;border-radius:20px!important;background:rgba(255,255,255,.67)!important;box-shadow:0 12px 30px rgba(72,86,125,.08),inset 0 1px 0 #fff!important}.pvd-visual-v7 .pvd-timeline-months{min-height:40px!important;border-bottom-color:var(--v7-line)!important;background:linear-gradient(90deg,rgba(243,239,255,.76),rgba(235,247,255,.72))!important}.pvd-visual-v7 .pvd-timeline-months>span{border-left-color:var(--v7-line)!important;color:#536e88!important;font:900 11px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-timeline-header{min-height:52px!important;border-bottom-color:var(--v7-line)!important;background:rgba(255,255,255,.73)!important}.pvd-visual-v7 .pvd-timeline-header>span{border-left-color:rgba(103,132,166,.09)!important;color:#8da3b8!important}.pvd-visual-v7 .pvd-timeline-header b{font:900 11px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-timeline-header em{font:700 8px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-timeline-header .is-today b{width:24px!important;height:24px!important;background:linear-gradient(135deg,#8b70ed,#7151d5)!important;box-shadow:0 5px 12px rgba(112,78,209,.22)!important}
-.pvd-visual-v7 .pvd-timeline-lane{border-bottom-color:var(--v7-line)!important}.pvd-visual-v7 .pvd-timeline-project{border-right-color:var(--v7-line)!important;background:rgba(248,250,255,.70)!important}.pvd-visual-v7 .pvd-timeline-project strong{color:#4d6a84!important;font:900 11px/1.25 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-timeline-project span{color:#91a6b8!important;font:800 9px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-timeline-cell{border-right-color:rgba(102,133,168,.09)!important}.pvd-visual-v7 .pvd-timeline-task{min-height:28px!important;padding:5px 9px!important;border:1px solid rgba(79,155,213,.12)!important;border-radius:9px!important;background:linear-gradient(135deg,#e8f6ff,#dceeff)!important;box-shadow:0 5px 12px rgba(68,133,186,.10)!important;color:#347cab!important;font:800 10px/1.2 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-timeline-task.p0{background:linear-gradient(135deg,#ffeaf0,#ffdde6)!important;color:#b45169!important}.pvd-visual-v7 .pvd-timeline-task.p1{background:linear-gradient(135deg,#fff4dc,#ffebc8)!important;color:#a36f20!important}
-.pvd-visual-v7 .pvd-stats-grid{gap:11px!important;overflow:visible!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}.pvd-visual-v7 .pvd-stats-grid>div{min-height:88px!important;padding:15px!important;border:1px solid rgba(255,255,255,.90)!important;border-radius:19px!important;background:rgba(255,255,255,.69)!important;box-shadow:0 10px 24px rgba(70,78,122,.07),inset 0 1px 0 #fff!important}.pvd-visual-v7 .pvd-stat-icon{width:38px!important;height:38px!important;min-width:38px!important;min-height:38px!important;border-radius:13px!important}.pvd-visual-v7 .pvd-stat-icon svg{width:19px!important;height:19px!important;max-width:19px!important;max-height:19px!important}.pvd-visual-v7 .pvd-stats-grid b{color:#353747!important;font:900 27px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-stats-grid .pvd-stat-label{color:#748ca3!important;font:800 10px/1 "Nunito","Microsoft YaHei",sans-serif!important}
-.pvd-visual-v7 .pvd-stats-chart,.pvd-visual-v7 .pvd-stats-panel{border:1px solid rgba(255,255,255,.91)!important;border-radius:21px!important;background:rgba(255,255,255,.61)!important;box-shadow:0 12px 28px rgba(70,78,122,.07),inset 0 1px 0 #fff!important}.pvd-visual-v7 .pvd-stats-chart{padding:20px 22px 17px!important}.pvd-visual-v7 .pvd-stats-chart-head h3,.pvd-visual-v7 .pvd-stats-panel h3{color:#3c3e50!important;font:900 15px/1.2 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-stats-chart-head p{color:#8298ac!important;font:700 10px/1.3 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-stats-chart-head>span{padding:7px 10px!important;border-radius:10px!important;background:#eee9ff!important;color:#6c51c7!important;font:800 9px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-chart-plot{height:230px!important;border-bottom-color:rgba(104,128,158,.18)!important}.pvd-visual-v7 .pvd-chart-grid span{border-color:rgba(104,128,158,.11)!important}.pvd-visual-v7 .pvd-chart-bar{width:min(42px,52%)!important;border-radius:9px 9px 3px 3px!important;background:linear-gradient(180deg,#ae96f6,#7758de)!important;box-shadow:0 9px 18px rgba(119,85,220,.17)!important}.pvd-visual-v7 .pvd-chart-column.is-doing .pvd-chart-bar{background:linear-gradient(180deg,#86c9f4,#50a1df)!important}.pvd-visual-v7 .pvd-chart-column.is-done .pvd-chart-bar{background:linear-gradient(180deg,#7ed8b2,#45a77d)!important}.pvd-visual-v7 .pvd-chart-column.is-overdue .pvd-chart-bar{background:linear-gradient(180deg,#f49caf,#df687f)!important}.pvd-visual-v7 .pvd-chart-column>b,.pvd-visual-v7 .pvd-chart-column>span{color:#6b8196!important;font:800 10px/1 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-stats-panel{padding:18px!important}.pvd-visual-v7 .pvd-stats-row{color:#7189a0!important;font:800 10px/1.2 "Nunito","Microsoft YaHei",sans-serif!important}.pvd-visual-v7 .pvd-stats-bar{height:7px!important;background:rgba(111,128,160,.12)!important}.pvd-visual-v7 .pvd-stats-bar span{background:linear-gradient(90deg,#a089ee,#7657da)!important}
-@media(max-width:720px){.pvd-visual-v7 .pvd-timeline,.pvd-visual-v7 .pvd-task-stats-view{padding:18px!important;border-radius:23px!important}.pvd-visual-v7 .pvd-stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.pvd-visual-v7 .pvd-stats-grid>div{min-height:76px!important}.pvd-visual-v7 .pvd-chart-plot{height:190px!important}}
-/* Exclusive status chart: todo uses the default violet bar; doing/done keep theirs. */
-.pvd-visual-v5 .pvd-chart-column.is-paused .pvd-chart-bar{background:#e3b23c!important}
-.pvd-visual-v7 .pvd-chart-column.is-todo .pvd-chart-bar{background:linear-gradient(180deg,#b3a6e8,#8f7ce0)!important}
-.pvd-visual-v7 .pvd-chart-column.is-paused .pvd-chart-bar{background:linear-gradient(180deg,#f2cd6e,#e0a92e)!important}
-/* Dark theme: remap hard-coded light surfaces to Obsidian-adjacent dark tones. */
-.theme-dark .pvd-visual-v7{--v7-ink:#e8e5f0;--v7-muted:#a6a1b3;--v7-line:rgba(255,255,255,.09)}
-.theme-dark .pvd-visual-v5 .pvd-timeline-board,.theme-dark .pvd-visual-v5 .pvd-timeline-header,.theme-dark .pvd-visual-v5 .pvd-stats-grid,.theme-dark .pvd-visual-v5 .pvd-stats-chart,.theme-dark .pvd-visual-v5 .pvd-stats-panel{background:#26242f!important;border-color:#3a3746!important;box-shadow:none!important}
-.theme-dark .pvd-visual-v5 .pvd-stats-grid>div{background:#26242f!important;border-color:#3a3746!important;box-shadow:none!important}
-.theme-dark .pvd-visual-v5 .pvd-timeline-months,.theme-dark .pvd-visual-v5 .pvd-timeline-project{background:#2c2a37!important;border-color:#3a3746!important}
-.theme-dark .pvd-visual-v5 .pvd-timeline-months>span,.theme-dark .pvd-visual-v5 .pvd-timeline-header b,.theme-dark .pvd-visual-v5 .pvd-timeline-header em{color:#a6a1b3!important}
-.theme-dark .pvd-visual-v5 .pvd-timeline-months>span,.theme-dark .pvd-visual-v5 .pvd-timeline-header>span{border-color:#3a3746!important}
-.theme-dark .pvd-visual-v5 .pvd-timeline-project strong{color:#e8e5f0!important}
-.theme-dark .pvd-visual-v5 .pvd-timeline-project span{color:#8a8696!important}
-.theme-dark .pvd-visual-v5 .pvd-timeline-lane,.theme-dark .pvd-visual-v5 .pvd-timeline-cell,.theme-dark .pvd-visual-v5 .pvd-timeline-months,.theme-dark .pvd-visual-v5 .pvd-timeline-header{border-color:#3a3746!important}
-.theme-dark .pvd-visual-v5 .pvd-timeline .pvd-section-head h2,.theme-dark .pvd-visual-v5 .pvd-task-stats-view>h2{color:#e8e5f0!important}
-.theme-dark .pvd-visual-v5 .pvd-timeline .pvd-section-head p,.theme-dark .pvd-visual-v5 .pvd-task-stats-view>p,.theme-dark .pvd-visual-v5 .pvd-stats-row,.theme-dark .pvd-visual-v5 .pvd-chart-column>b,.theme-dark .pvd-visual-v5 .pvd-chart-column>span{color:#a6a1b3!important}
-.theme-dark .pvd-visual-v5 .pvd-stats-grid b{color:#e8e5f0!important}
-.theme-dark .pvd-visual-v5 .pvd-stats-grid .pvd-stat-label,.theme-dark .pvd-visual-v5 .pvd-stats-chart-head p,.theme-dark .pvd-visual-v5 .pvd-stats-chart-head h3,.theme-dark .pvd-visual-v5 .pvd-stats-panel h3{color:#a6a1b3!important}
-.theme-dark .pvd-visual-v5 .pvd-stats-chart-head h3,.theme-dark .pvd-visual-v5 .pvd-stats-panel h3{color:#e8e5f0!important}
-.theme-dark .pvd-visual-v5 .pvd-stats-chart-head>span{background:#3b3750!important;color:#b9aee8!important}
-.theme-dark .pvd-visual-v5 .pvd-chart-grid span{border-top-color:#3a3746!important}
-.theme-dark .pvd-visual-v5 .pvd-chart-plot{border-bottom-color:#4a4658!important}
-.theme-dark .pvd-visual-v5 .pvd-stats-bar{background:#3a3746!important}
-.theme-dark .pvd-visual-v5 .pvd-timeline-task{background:rgba(88,140,190,.28)!important;color:#9fd0f0!important}
-.theme-dark .pvd-visual-v5 .pvd-timeline-task.p0{background:rgba(190,88,110,.30)!important;color:#f2a9b8!important}
-.theme-dark .pvd-visual-v5 .pvd-timeline-task.p1{background:rgba(200,160,70,.28)!important;color:#eed49a!important}
-.theme-dark .pvd-visual-v7 .pvd-visual-controls,.theme-dark .pvd-visual-v7 .pvd-timeline-ranges{background:rgba(38,36,50,.85)!important;border-color:rgba(255,255,255,.10)!important;box-shadow:0 12px 30px rgba(0,0,0,.35)!important;backdrop-filter:none!important}
-.theme-dark .pvd-visual-v7 .pvd-visual-tabs .pvd-visual-mode,.theme-dark .pvd-visual-v7 .pvd-timeline-ranges button{color:#a6a1b3!important}
-.theme-dark .pvd-visual-v7 .pvd-visual-tabs .pvd-visual-mode.is-active{background:linear-gradient(135deg,#4c4570,#3f3a5e)!important;color:#dcd6f5!important;box-shadow:0 5px 14px rgba(0,0,0,.35)!important}
-.theme-dark .pvd-visual-v7 .pvd-timeline-ranges button.is-active{background:linear-gradient(135deg,#7a63d8,#5f49b8)!important;color:#fff!important}
-.theme-dark .pvd-visual-v7 .pvd-visual-select{background:rgba(30,28,42,.9)!important;border-color:rgba(255,255,255,.12)!important;color:#c7c2d4!important}
-.theme-dark .pvd-visual-v7 .pvd-timeline,.theme-dark .pvd-visual-v7 .pvd-task-stats-view{background:linear-gradient(145deg,rgba(34,32,46,.96),rgba(30,32,46,.92))!important;border-color:rgba(255,255,255,.10)!important;box-shadow:0 22px 52px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.06)!important}
-.theme-dark .pvd-visual-v7 .pvd-timeline-board{background:rgba(30,28,42,.9)!important;border-color:rgba(255,255,255,.10)!important;box-shadow:none!important}
-.theme-dark .pvd-visual-v7 .pvd-timeline-months{background:linear-gradient(90deg,rgba(52,48,74,.85),rgba(44,48,72,.82))!important}
-.theme-dark .pvd-visual-v7 .pvd-timeline-header{background:rgba(38,36,52,.9)!important}
-.theme-dark .pvd-visual-v7 .pvd-timeline-header>span{color:#8a8696!important}
-.theme-dark .pvd-visual-v7 .pvd-timeline-project{background:rgba(42,40,56,.85)!important}
-.theme-dark .pvd-visual-v7 .pvd-timeline-project strong{color:#c7c2d4!important}
-.theme-dark .pvd-visual-v7 .pvd-timeline-task{background:linear-gradient(135deg,rgba(70,120,170,.4),rgba(58,105,155,.35))!important;color:#a8d8f2!important;border-color:rgba(120,180,230,.25)!important;box-shadow:none!important}
-.theme-dark .pvd-visual-v7 .pvd-timeline-task.p0{background:linear-gradient(135deg,rgba(180,80,105,.4),rgba(160,70,95,.35))!important;color:#f2aeb9!important}
-.theme-dark .pvd-visual-v7 .pvd-timeline-task.p1{background:linear-gradient(135deg,rgba(190,150,60,.4),rgba(170,132,50,.35))!important;color:#eed49a!important}
-.theme-dark .pvd-visual-v7 .pvd-stats-grid>div,.theme-dark .pvd-visual-v7 .pvd-stats-chart,.theme-dark .pvd-visual-v7 .pvd-stats-panel{background:rgba(38,36,52,.85)!important;border-color:rgba(255,255,255,.10)!important;box-shadow:0 10px 24px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.05)!important}
-.theme-dark .pvd-visual-v7 .pvd-stats-grid b{color:#e8e5f0!important}
-.theme-dark .pvd-visual-v7 .pvd-stats-grid .pvd-stat-label,.theme-dark .pvd-visual-v7 .pvd-stats-chart-head p,.theme-dark .pvd-visual-v7 .pvd-stats-row,.theme-dark .pvd-visual-v7 .pvd-chart-column>b,.theme-dark .pvd-visual-v7 .pvd-chart-column>span{color:#a6a1b3!important}
-.theme-dark .pvd-visual-v7 .pvd-stats-chart-head h3,.theme-dark .pvd-visual-v7 .pvd-stats-panel h3{color:#e8e5f0!important}
-.theme-dark .pvd-visual-v7 .pvd-stats-chart-head>span{background:#3b3750!important;color:#b9aee8!important}
-.theme-dark .pvd-visual-v7 .pvd-chart-grid span{border-color:rgba(255,255,255,.07)!important}
-.theme-dark .pvd-visual-v7 .pvd-chart-plot{border-bottom-color:rgba(255,255,255,.14)!important}
-.theme-dark .pvd-visual-v7 .pvd-stats-bar{background:rgba(255,255,255,.10)!important}`;
-module.exports = class FocusWorkbenchPlugin extends Plugin {
+module.exports = class FocusWorkbenchPlugin extends import_obsidian.Plugin {
+  constructor() {
+    super(...arguments);
+    // This is plugin-owned persistence, not the Obsidian 1.13 declarative-settings API.
+    this.settings = DEFAULT_SETTINGS;
+  }
   async onload() {
-    var _a;
     await this.loadSettings();
     ACTIVE_LANGUAGE = this.settings.language;
-    (_a = document.getElementById(VISUAL_RUNTIME_STYLE_ID)) == null ? void 0 : _a.remove();
-    const visualStyle = document.createElement("style");
-    visualStyle.id = VISUAL_RUNTIME_STYLE_ID;
-    visualStyle.textContent = VISUAL_RUNTIME_CSS;
-    document.head.appendChild(visualStyle);
-    this.register(() => visualStyle.remove());
     this.registerView(VIEW_TYPE, (leaf) => new FocusWorkbenchView(leaf, this));
     this.addSettingTab(new FocusWorkbenchSettingTab(this.app, this));
     this.ribbonIconEl = this.addRibbonIcon("layout-dashboard", this.settings.language === "en" ? "Open Omni Workbench" : "打开 Omni Workbench", () => this.activateView());
-    this.addCommand({ id: "open-focus-workbench", name: "Open Omni Workbench", callback: () => this.activateView() });
+    this.addCommand({ id: "open-focus-workbench", name: "Open workbench", callback: () => this.activateView() });
     this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => this.addKnowledgeConversionMenu(menu, file)));
   }
   knowledgeNoteType(file) {
@@ -9268,8 +9198,5 @@ module.exports = class FocusWorkbenchPlugin extends Plugin {
     await workspace.revealLeaf(leaf);
   }
   onunload() {
-    var _a;
-    (_a = document.getElementById(VISUAL_RUNTIME_STYLE_ID)) == null ? void 0 : _a.remove();
-    this.app.workspace.detachLeavesOfType(VIEW_TYPE);
   }
 };

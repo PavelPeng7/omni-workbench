@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.14
+
+### Fixed
+
+- Replaced unsafe SVG HTML injection with Obsidian SVG helpers.
+- Moved the visual-workbench style override into the plugin stylesheet and preserve user-arranged Workbench leaves during unload.
+- Modernized the Obsidian import and corrected asynchronous event handling.
+
 ## 0.3.12
 
 ### Changed

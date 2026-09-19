@@ -4,7 +4,7 @@
   <a href="https://obsidian.md/">
     <img src="https://img.shields.io/badge/OBSIDIAN-1.9.14%2B-111111?style=flat-square&amp;logo=obsidian&amp;logoColor=white" height="28" alt="Requires Obsidian 1.9.14 or newer">
   </a>
-  <img src="https://img.shields.io/badge/VERSION-0.3.13-65B500?style=flat-square" height="28" alt="Version 0.3.13">
+  <img src="https://img.shields.io/badge/VERSION-0.3.14-65B500?style=flat-square" height="28" alt="Version 0.3.14">
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/LICENSE-MIT-F97316?style=flat-square" height="28" alt="MIT license">
   </a>
