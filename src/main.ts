@@ -31,6 +31,14 @@ const DEFAULT_SETTINGS = {
 // persisted workflow values remain in their existing schema so switching languages never
 // rewrites or disconnects a user's notes.
 const UI_TEXT_EN = {
+  "项目": "Projects", "项目管理": "Project management", "安排下一步行动": "Plan your next action", "新建项目": "New project", "打开项目": "Open project",
+  "创建项目，或为已有项目安排任务。": "Create a project or add tasks to an existing one.", "还没有项目。先创建项目，再添加子任务。": "No projects yet. Create a project, then add child tasks.",
+  "从第一个项目开始": "Start with your first project", "项目可以暂时没有任务。创建后，它会一直显示在这里。": "Projects can start without tasks. Once created, they stay visible here.",
+  "还没有子任务，为这个项目安排第一步行动。": "No child tasks yet. Plan the first action for this project.",
+  "请选择项目": "Choose a project", "请选择项目。": "Choose a project.", "没有合适的项目？可以直接新建。": "Need a different project? Create one here.",
+  "先创建一个项目，再为它安排任务。": "Create a project first, then plan its tasks.", "项目已选中，继续填写任务。": "Project selected. Continue filling in your task.",
+  "选择项目后创建；任务会保存在该项目的任务目录。": "Choose a project. The task will be saved in its child-task folder.", "为项目工作区命名": "Name your project workspace", "项目工作区已创建": "Project workspace created.",
+  "创建失败，请检查目录与模板后重试。": "Creation failed. Check the folder and template, then retry.", "保存失败，请检查目录与模板后重试。": "Save failed. Check the folder and template, then retry.",
   "创建": "Create", "取消": "Cancel", "保存": "Save", "保存修改": "Save changes", "保存配置": "Save configuration",
   "首页": "Home", "任务工作台": "Tasks", "知识工作台": "Knowledge", "打开任务总表": "Open task table", "刷新": "Refresh",
   "今天，做重要的事。": "Do what matters today.", "任务指挥舱": "Task command center", "知识卡片笔记流程": "Card-note workflow",
@@ -85,6 +93,7 @@ const UI_TEXT_EN = {
 };
 
 const UI_DYNAMIC_EN = [
+  [/^(\d+) 项任务 · (\d+) 项待推进 · (\d+) 项已完成$/, "$1 tasks · $2 to advance · $3 completed"], [/^查看子任务 · (\d+) 项$/, "View child tasks · $1 tasks"],
   [/^编辑任务：(.+)$/, "Edit task: $1"], [/^编辑闪念：(.+)$/, "Edit idea: $1"], [/^闪念：(.+)$/, "Idea: $1"], [/^任务：(.+)$/, "Task: $1"],
   [/^来自任务 · (.+)$/, "From task · $1"], [/^捕捉于 (.+)$/, "Captured on $1"], [/^(\d+) 条$/, "$1 items"], [/^(\d+) 篇$/, "$1 notes"], [/^(\d+) 项$/, "$1 tasks"],
   [/^今天捕捉 · 剩 7 天$/, "Captured today · 7 days left"], [/^(\d+) 天前捕捉 · 剩 (\d+) 天$/, "Captured $1 days ago · $2 days left"], [/^7 天前捕捉 · 今天到期$/, "Captured 7 days ago · Due today"], [/^(\d+) 天前捕捉 · 已逾期 (\d+) 天$/, "Captured $1 days ago · $2 days overdue"],
@@ -127,12 +136,20 @@ class TextPromptModal extends Modal {
   onOpen() {
     const { contentEl } = this;
     this.modalEl.addClass("pvd-modal-shell");
-    contentEl.addClass("pvd-modal");
+    contentEl.addClass("pvd-modal", "pvd-root");
     contentEl.createEl("h2", { text: this.title });
     const input = contentEl.createEl("input", { type: "text", placeholder: this.placeholder });
     const actions = contentEl.createDiv({ cls: "pvd-modal-actions" });
     const save = actions.createEl("button", { text: "创建", cls: "mod-cta" });
-    const commit = async () => { const value = input.value.trim(); const error = this.validate(value); if (error) { showNotice(error); return; } await this.submit(value); this.close(); };
+    const cancel = actions.createEl("button", { text: "取消" }); cancel.addEventListener("click", () => this.close());
+    const commit = async () => {
+      if (save.disabled) return;
+      const value = input.value.trim(); const error = this.validate(value); if (error) { showNotice(error); return; }
+      save.disabled = true;
+      try { if (await this.submit(value) !== false) this.close(); }
+      catch (error) { console.error("Workbench creation failed", error); showNotice("创建失败，请检查目录与模板后重试。"); }
+      finally { save.disabled = false; }
+    };
     save.addEventListener("click", () => void commit());
     input.addEventListener("keydown", event => { if (event.isComposing || event.keyCode === 229) return; if (event.key === "Enter") void commit(); });
     localizeElement(contentEl);
@@ -160,19 +177,29 @@ class ConfirmModal extends Modal {
 class TaskEditorModal extends Modal {
   constructor(app, file, data, projects, submit, workflow = [], options = {}) { super(app); this.file = file; this.data = data; this.projects = projects; this.submit = submit; this.workflow = workflow; this.options = options; }
   onOpen() {
-    const { contentEl } = this; this.modalEl.addClass("pvd-modal-shell"); contentEl.addClass("pvd-modal"); const data = this.data;
+    const { contentEl } = this; this.modalEl.addClass("pvd-modal-shell"); contentEl.addClass("pvd-modal", "pvd-root"); const data = this.data;
     contentEl.createEl("h2", { text: this.options.heading || `编辑任务：${this.file.basename}` });
     if (this.options.lead) contentEl.createEl("p", { cls: "pvd-modal-lead", text: this.options.lead });
     else contentEl.createEl("p", { cls: "pvd-modal-lead", text: "修改任务属性，或直接执行常用工作流。卡片本身保持简洁，不再展开操作面板。" });
     const form = contentEl.createDiv({ cls: "pvd-task-editor" });
     const field = (label, element) => { const row = form.createEl("label"); row.createSpan({ text: label }); row.appendChild(element); return element; };
     let title = null;
-    if (this.options.mode === "create") { title = field("任务标题", document.createElement("input")); title.type = "text"; title.placeholder = "任务标题"; title.value = String(data.title || ""); }
+    if (this.options.mode === "create") { title = field("任务标题", document.createElement("input")); title.parentElement.addClass("pvd-task-editor-wide"); title.type = "text"; title.placeholder = "任务标题"; title.value = String(data.title || ""); }
     const project = field("所属项目", document.createElement("select"));
-    project.createEl("option", { text: "未关联项目", value: "" });
+    project.parentElement.addClass("pvd-task-editor-wide");
+    project.createEl("option", { text: this.options.mode === "create" ? "请选择项目" : "未关联项目", value: "" });
     const options = [...new Set([...this.projects, String(data.project || "")].filter(Boolean))].sort((a, b) => a.localeCompare(b, "zh-CN"));
     options.forEach(name => project.createEl("option", { text: name, value: name }));
     project.value = String(data.project || "");
+    if (this.options.createProject) {
+      const projectActions = form.createDiv({ cls: "pvd-project-field-actions" });
+      const hint = projectActions.createEl("p", { cls: "pvd-project-hint", text: options.length ? "没有合适的项目？可以直接新建。" : "先创建一个项目，再为它安排任务。" });
+      const create = projectActions.createEl("button", { text: "新建项目" });
+      create.addEventListener("click", () => this.options.createProject(name => {
+        if (!Array.from(project.options).some(option => option.value === name)) project.createEl("option", { text: name, value: name });
+        project.value = name; hint.textContent = translateUiText("项目已选中，继续填写任务。"); project.focus();
+      }));
+    }
     const priority = field("优先级", document.createElement("select")); ["P0", "P1", "P2"].forEach(value => priority.createEl("option", { text: value, value })); priority.value = data.priority || "P2";
     const status = field("任务状态", document.createElement("select")); ["待做", "进行中", "暂停", "完成"].forEach(value => status.createEl("option", { text: value, value })); status.value = data.status || "待做";
     const date = field("计划日期", document.createElement("input")); date.type = "date"; date.value = data.plan || "";
@@ -185,12 +212,18 @@ class TaskEditorModal extends Modal {
     const actions = contentEl.createDiv({ cls: "pvd-modal-actions" });
     const save = actions.createEl("button", { text: this.options.submitLabel || "保存", cls: "mod-cta" });
     const commit = async () => {
+      if (save.disabled) return;
+      if (this.options.mode === "create" && !project.value) { showNotice("请选择项目。"); project.focus(); return; }
       const minutes = estimate.value.trim();
       if (minutes && (!/^\d+$/.test(minutes) || Number(minutes) < 0)) { showNotice("预计耗时请输入大于等于 0 的整数分钟数。"); return; }
       const values = { project: project.value.trim(), priority: priority.value, status: status.value, plan: date.value, estimate: minutes };
       if (title) { const nextTitle = title.value.trim(); const error = this.options.validateTitle ? this.options.validateTitle(nextTitle) : ""; if (error) { showNotice(error); return; } values.title = nextTitle; }
-      await this.submit(values); this.close();
+      save.disabled = true;
+      try { if (await this.submit(values) !== false) this.close(); }
+      catch (error) { console.error("Workbench task save failed", error); showNotice("保存失败，请检查目录与模板后重试。"); }
+      finally { save.disabled = false; }
     };
+    const cancel = actions.createEl("button", { text: "取消" }); cancel.addEventListener("click", () => this.close());
     save.addEventListener("click", () => void commit());
     if (title) { title.addEventListener("keydown", event => { if (event.isComposing || event.keyCode === 229) return; if (event.key === "Enter") void commit(); }); window.setTimeout(() => title.focus(), 0); }
     localizeElement(contentEl);
@@ -368,7 +401,8 @@ class FocusWorkbenchView extends ItemView {
   formatDuration(seconds) { return formatTimerDuration(seconds); }
   timerLabel(file) { const expected = this.expectedSeconds(file); const elapsed = this.elapsedSeconds(file); return expected ? `剩余 ${this.formatDuration(expected - elapsed)}` : `已专注 ${this.formatDuration(elapsed)}`; }
   allTaskFiles() { const schema = this.schema(); const projectRoot = this.config().project; return this.files().filter(file => this.starts(file, projectRoot) && file.path.includes("/任务/") && String(this.meta(file)[schema.typeField] || "") === schema.typeValue); }
-  projectOptions() { return this.files().filter(file => this.starts(file, this.config().project) && file.name === "项目.md").map(file => file.parent?.name || file.basename).sort((a, b) => a.localeCompare(b, "zh-CN")); }
+  projectFiles() { return this.files().filter(file => file.name === "项目.md" && file.parent?.parent?.path === this.config().project.replace(/\/$/, "")).sort((a, b) => a.parent.name.localeCompare(b.parent.name, "zh-CN")); }
+  projectOptions() { return this.projectFiles().map(file => file.parent.name); }
   projectWorkspace(name) { return this.config().project + "/" + name; }
   tasks() { return this.sourceTasks || []; }
   async refreshTaskSource() {
@@ -793,7 +827,14 @@ class FocusWorkbenchView extends ItemView {
     const tasks = this.tasks(); const active = tasks.filter(file => !this.taskDone(file)); const today = this.today(); const todayKey = this.calendarKey(today);
     const todayCount = active.filter(file => this.isTodayTask(file, todayKey)).length; const doingCount = active.filter(file => this.taskStatus(file) === "进行中").length; const overdueCount = active.filter(file => this.isPastCalendarDay(this.taskPlanKey(file), today)).length;
     const views = shell.createDiv({ cls: "pvd-task-view-tabs" });
-    [["today", "今日任务"], ["visual", "任务视图"], ["all", "全部任务"]].forEach(([key, label]) => this.button(views, label, () => { this.taskView = key; if (key === "today") this.taskFilter = "today"; if (key === "all" && this.taskFilter === "today") this.taskFilter = "active"; void this.render(); }, this.taskView === key ? "is-active" : ""));
+    [["today", "今日任务"], ["visual", "任务视图"], ["all", "全部任务"], ["projects", "项目"]].forEach(([key, label]) => { const button = this.button(views, label, () => { this.taskView = key; if (key === "today") this.taskFilter = "today"; if (key === "all" && this.taskFilter === "today") this.taskFilter = "active"; void this.render(); }, this.taskView === key ? "is-active" : ""); button.setAttribute("aria-pressed", String(this.taskView === key)); });
+    const creation = shell.createDiv({ cls: "pvd-workspace-creation" });
+    const creationCopy = creation.createDiv(); creationCopy.createEl("strong", { text: this.taskView === "projects" ? "项目管理" : "安排下一步行动" });
+    creationCopy.createEl("p", { cls: "pvd-project-hint", text: this.projectOptions().length ? "创建项目，或为已有项目安排任务。" : "还没有项目。先创建项目，再添加子任务。" });
+    const creationActions = creation.createDiv({ cls: "pvd-actions" });
+    this.button(creationActions, "新建项目", () => this.createProject({ openDocument: false }), this.taskView === "projects" || !this.projectOptions().length ? "mod-cta" : "");
+    this.button(creationActions, "新建任务", () => this.createTask(), this.taskView !== "projects" && this.projectOptions().length ? "mod-cta" : "");
+    if (this.taskView === "projects") { this.renderProjects(shell, tasks); return; }
     const overview = shell.createDiv({ cls: "pvd-task-overview" });
     const overviewText = this.taskView === "today" ? `今日 ${todayCount} 项 · 进行中 ${doingCount} 项 · 已逾期 ${overdueCount} 项` : this.taskView === "visual" ? `${this.taskVisualMode === "calendar" ? this.calendarMonthLabel() : this.taskVisualMode === "timeline" ? `${this.timelineDays} 天排期` : "当前筛选"} · 已应用项目、优先级与状态筛选` : `待推进 ${active.length} 项 · 进行中 ${doingCount} 项 · 已逾期 ${overdueCount} 项`;
     overview.createEl("span", { text: overviewText });
@@ -812,7 +853,6 @@ class FocusWorkbenchView extends ItemView {
       const controls = main.createEl("section", { cls: "pvd-card pvd-task-controls" }); const toolbar = controls.createDiv({ cls: "pvd-task-toolbar" });
       const search = toolbar.createEl("input", { cls: "pvd-task-search", type: "search", placeholder: "搜索任务、项目或优先级…", value: this.taskSearch, attr: { "aria-label": "搜索任务" } });
       search.addEventListener("input", event => { this.taskSearch = event.target.value; void this.renderTasksResults(this.taskResultsEl, filters, tasks, today, this.taskFilter, true, true).then(() => this.renderSelectionToolbar()); });
-      this.button(toolbar, "＋ 新建任务", () => this.createTask(), "mod-cta");
       const filterBar = controls.createDiv({ cls: "pvd-filter" }); Object.entries(filters).forEach(([key, label]) => this.button(filterBar, label, () => { this.taskFilter = key; void this.render(); }, this.taskFilter === key ? "is-active" : ""));
       this.createSelectionToolbar(main);
       const results = main.createDiv({ cls: "pvd-task-results" }); this.taskResultsEl = results; await this.renderTasksResults(results, filters, tasks, today, this.taskFilter, true, true); return;
@@ -821,10 +861,28 @@ class FocusWorkbenchView extends ItemView {
     const todayActionCopy = todayActions.createDiv({ cls: "pvd-today-actions-copy" });
     todayActionCopy.createEl("strong", { text: "今天要推进什么？" });
     todayActionCopy.createSpan({ text: todayCount ? `当前有 ${todayCount} 项今日任务` : "创建一项任务，开始安排今天" });
-    this.button(todayActions, "＋ 新建任务", () => this.createTask(), "mod-cta");
     this.createSelectionToolbar(main);
     const todayResults = main.createDiv({ cls: "pvd-task-results pvd-today-results" });
     await this.renderTasksResults(todayResults, filters, tasks, today, "today", false, true);
+  }
+
+  renderProjects(parent, tasks) {
+    const projects = this.projectFiles(); const list = parent.createDiv({ cls: "pvd-project-list" });
+    if (!projects.length) { const empty = list.createEl("section", { cls: "pvd-card" }); empty.createEl("h2", { text: "从第一个项目开始" }); empty.createEl("p", { text: "项目可以暂时没有任务。创建后，它会一直显示在这里。" }); return; }
+    projects.forEach(file => {
+      const name = file.parent.name;
+      const children = tasks.filter(task => task.path.startsWith(`${file.parent.path}/任务/`)).sort((a, b) => this.compareTasks(a, b));
+      const completed = children.filter(task => this.taskDone(task)).length;
+      const card = list.createEl("section", { cls: "pvd-card pvd-project-card" }); const head = card.createDiv({ cls: "pvd-section-head" });
+      const copy = head.createDiv(); copy.createEl("h2", { text: name });
+      copy.createEl("p", { cls: "pvd-project-hint", text: `${children.length} 项任务 · ${children.length - completed} 项待推进 · ${completed} 项已完成` });
+      const actions = head.createDiv({ cls: "pvd-actions" }); this.button(actions, "打开项目", () => this.openFile(file)); this.button(actions, "新建任务", () => this.createTask(name), "mod-cta");
+      if (!children.length) { card.createEl("p", { text: "还没有子任务，为这个项目安排第一步行动。" }); return; }
+      const details = card.createEl("details", { cls: "pvd-project-tasks" }); details.open = this.expandedProjects?.has(file.path) || false;
+      details.addEventListener("toggle", () => { this.expandedProjects ||= new Set(); if (details.open) this.expandedProjects.add(file.path); else this.expandedProjects.delete(file.path); });
+      details.createEl("summary", { text: `查看子任务 · ${children.length} 项` });
+      const childList = details.createDiv({ cls: "pvd-project-child-list" }); children.forEach(task => this.renderTaskCard(childList, task));
+    });
   }
 
   matchesTaskSearch(file) {
@@ -1078,13 +1136,13 @@ class FocusWorkbenchView extends ItemView {
   }
   async convertIdeaToNote(file, kind) { return this.convertNoteToType(file, kind); }
   discardIdea(file) { new ConfirmModal(this.app, "舍弃闪念", `将“${this.ideaTitle(file)}”移入 Obsidian 回收站，并清理任务中的关联？`, "舍弃", async () => { const linkedTask = this.ideaLinkedTask(file); await this.replaceTaskIdeaLink(linkedTask, file.path); await this.app.fileManager.trashFile(file); showNotice("闪念已移入回收站，任务关联已清理"); await this.render(); }).open(); }
-  async createTask() {
-    const defaults = { project: "", priority: "P2", status: "待做", plan: this.dateKey(), estimate: "" };
+  async createTask(project = "") {
+    const defaults = { project, priority: "P2", status: "待做", plan: this.dateKey(), estimate: "" };
     new TaskEditorModal(this.app, { basename: "新任务" }, defaults, this.projectOptions(), async values => {
-      if (!values.project) { showNotice("请选择项目。"); return; }
+      if (!values.project) { showNotice("请选择项目。"); return false; }
       const config = this.config();
       const result = planWorkbenchDocumentCreation({ type: "task", title: values.title, folders: { task: "", project: config.project, fleeting: config.inbox, literature: config.literature, permanent: config.permanent }, projectWorkspace: this.projectWorkspace(values.project), occupiedPaths: this.app.vault.getAllLoadedFiles().map(entry => entry.path) });
-      if (!result.ok) { showNotice(result.error); return; }
+      if (!result.ok) { showNotice(result.error); return false; }
       for (const directory of result.plan.directories) await this.ensureFolder(directory);
       const file = await this.app.vault.create(result.plan.documentPath, await this.newTaskContent(values.title));
       await this.app.fileManager.processFrontMatter(file, next => {
@@ -1095,18 +1153,22 @@ class FocusWorkbenchView extends ItemView {
       });
       if (values.status !== "待做") await this.transitionTask(file, values.status);
       showNotice("任务已创建"); await this.render();
-    }, [], { mode: "create", heading: "新建任务", lead: "选择项目后创建；任务会保存在该项目的任务目录。", submitLabel: "创建任务", validateTitle: title => this.validateNoteTitle(title) }).open();
+    }, [], { mode: "create", heading: "新建任务", lead: "选择项目后创建；任务会保存在该项目的任务目录。", submitLabel: "创建任务", validateTitle: title => this.validateNoteTitle(title), createProject: onCreated => this.createProject({ openDocument: false, onCreated }) }).open();
   }
-  async createProject() {
+  async createProject({ openDocument = true, onCreated } = {}) {
     new TextPromptModal(this.app, "新建项目", "为项目工作区命名", async title => {
       const config = this.config();
       const result = planWorkbenchDocumentCreation({ type: "project", title, folders: { task: "", project: config.project, fleeting: config.inbox, literature: config.literature, permanent: config.permanent }, occupiedPaths: this.app.vault.getAllLoadedFiles().map(entry => entry.path) });
-      if (!result.ok) { showNotice(result.error); return; }
+      if (!result.ok) { showNotice(result.error); return false; }
       for (const directory of result.plan.directories) await this.ensureFolder(directory);
       const template = this.app.vault.getAbstractFileByPath(this.plugin.settings.projectTemplatePath);
       const source = template && !template.children ? await this.app.vault.cachedRead(template) : starterProjectTemplate();
-      const file = await this.app.vault.create(result.plan.documentPath, source.replace(/^# 新项目$/m, "# " + title));
-      showNotice("项目工作区已创建"); await this.openFile(file); await this.render();
+      const workspaceName = result.plan.directories[1].split("/").pop();
+      const file = await this.app.vault.create(result.plan.documentPath, source.replace(/^# 新项目$/m, () => "# " + workspaceName));
+      showNotice("项目工作区已创建");
+      if (onCreated) onCreated(workspaceName);
+      if (openDocument) await this.openFile(file);
+      await this.render();
     }, title => this.validateNoteTitle(title)).open();
   }
   async newTaskContent(title) {
